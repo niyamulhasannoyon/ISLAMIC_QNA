@@ -1,4 +1,4 @@
-import { batchUpsertFatwas } from '../lib/db';
+import { batchUpsertFatwas, closeDb } from '../lib/db';
 import { computeFatwaHash } from '../lib/hash';
 import { IngestItemInput, FatwaSource } from '../types/fatwa';
 import { runImport } from './import-json';
@@ -103,25 +103,32 @@ const INITIAL_FATWAS: Array<Omit<IngestItemInput, 'sha256_hash' | 'hash'> & { so
 ];
 
 async function seed() {
-  console.log('Seeding SQLite database with authentic Fatwa records...');
-  const items: IngestItemInput[] = INITIAL_FATWAS.map((item) => {
-    const sha256_hash = computeFatwaHash({
-      question: item.question,
-      answer: item.answer,
+  try {
+    console.log('Seeding SQLite database with authentic Fatwa records...');
+    const items: IngestItemInput[] = INITIAL_FATWAS.map((item) => {
+      const sha256_hash = computeFatwaHash({
+        question: item.question,
+        answer: item.answer,
+      });
+      return {
+        ...item,
+        sha256_hash,
+        hash: sha256_hash,
+      };
     });
-    return {
-      ...item,
-      sha256_hash,
-      hash: sha256_hash,
-    };
-  });
 
-  const res = batchUpsertFatwas(items);
-  console.log('Seed Results:', res);
-  console.log(`Database initial seed complete! (Total: ${res.total}, Inserted: ${res.inserted}, Updated: ${res.updated}, Skipped: ${res.skipped})`);
+    const res = batchUpsertFatwas(items);
+    console.log('Seed Results:', res);
+    console.log(`Database initial seed complete! (Total: ${res.total}, Inserted: ${res.inserted}, Updated: ${res.updated}, Skipped: ${res.skipped})`);
 
-  console.log('\nChecking for external JSON files in data/ directory...');
-  await runImport();
+    console.log('\nChecking for external JSON files in data/ directory...');
+    await runImport();
+  } finally {
+    closeDb();
+  }
 }
 
-seed();
+seed().catch((err) => {
+  console.error('Seed script encountered error:', err);
+  process.exit(1);
+});

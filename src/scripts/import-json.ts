@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { batchUpsertFatwas } from '../lib/db';
+import { batchUpsertFatwas, closeDb } from '../lib/db';
 import { computeFatwaHash } from '../lib/hash';
 import { IngestItemInput, FatwaSource } from '../types/fatwa';
 
@@ -263,8 +263,12 @@ export async function runImport(filePath?: string) {
 
 if (require.main === module) {
   const argFile = process.argv[2];
-  runImport(argFile).catch((err) => {
-    console.error('Import failed:', err);
-    process.exit(1);
-  });
+  runImport(argFile)
+    .catch((err) => {
+      console.error('Import failed:', err);
+      process.exit(1);
+    })
+    .finally(() => {
+      closeDb();
+    });
 }

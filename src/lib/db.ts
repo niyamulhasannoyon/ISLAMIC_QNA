@@ -172,6 +172,62 @@ export function getDb(): Database.Database {
   return db;
 }
 
+interface DbStatements {
+  selectByHash: Database.Statement;
+  insert: Database.Statement;
+  update: Database.Statement;
+  getAll: Database.Statement;
+  getById: Database.Statement;
+  count: Database.Statement;
+  sources: Database.Statement;
+  categories: Database.Statement;
+  scholars: Database.Statement;
+}
+
+let cachedStatements: DbStatements | undefined;
+
+function getStatements(db: Database.Database): DbStatements {
+  if (cachedStatements) {
+    return cachedStatements;
+  }
+
+  cachedStatements = {
+    selectByHash: db.prepare(
+      'SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date FROM fatwas WHERE sha256_hash = ?'
+    ),
+    insert: db.prepare(`
+      INSERT INTO fatwas (
+        id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    update: db.prepare(`
+      UPDATE fatwas
+      SET title = ?, category = ?, tags = ?, scholar = ?, source_url = ?, published_date = ?, updated_at = ?
+      WHERE id = ?
+    `),
+    getAll: db.prepare('SELECT * FROM fatwas ORDER BY published_date DESC, created_at DESC'),
+    getById: db.prepare('SELECT * FROM fatwas WHERE id = ?'),
+    count: db.prepare('SELECT count(*) as count FROM fatwas'),
+    sources: db.prepare('SELECT source as name, COUNT(*) as count FROM fatwas GROUP BY source ORDER BY count DESC'),
+    categories: db.prepare('SELECT category as name, COUNT(*) as count FROM fatwas GROUP BY category ORDER BY count DESC'),
+    scholars: db.prepare("SELECT scholar as name, COUNT(*) as count FROM fatwas WHERE scholar IS NOT NULL AND scholar != '' GROUP BY scholar ORDER BY count DESC"),
+  };
+
+  return cachedStatements;
+}
+
+export function closeDb(): void {
+  cachedStatements = undefined;
+  if (global.__fatwaDb) {
+    try {
+      global.__fatwaDb.close();
+    } catch (e) {
+      // Ignore if already closed
+    }
+    global.__fatwaDb = undefined;
+  }
+}
+
 function autoSeedIfEmpty(db: Database.Database): void {
   try {
     const row = db.prepare('SELECT count(*) as count FROM fatwas').get() as { count: number } | undefined;
@@ -260,6 +316,7 @@ export type UpsertResult = IngestResultItem;
  */
 export function upsertFatwa(item: IngestItemInput): UpsertResult {
   const db = getDb();
+  const stmts = getStatements(db);
 
   const title = normalizeText(item.title);
   const question = normalizeText(item.question);
@@ -279,9 +336,7 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
   const sha256_hash = (item.sha256_hash || item.hash || computedHash).toLowerCase();
 
   // Check if entry with this sha256_hash already exists
-  const existing = db
-    .prepare('SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date FROM fatwas WHERE sha256_hash = ?')
-    .get(sha256_hash) as any;
+  const existing = stmts.selectByHash.get(sha256_hash) as any;
 
   if (existing) {
     // Check if any mutable metadata changed
@@ -294,12 +349,7 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
       existing.published_date !== published_date;
 
     if (hasChanged) {
-      db.prepare(`
-        UPDATE fatwas
-        SET title = ?, category = ?, tags = ?, scholar = ?, source_url = ?, published_date = ?, updated_at = ?
-        WHERE id = ?
-      `).run(title, category, tags, scholar, source_url, published_date, now, existing.id);
-
+      stmts.update.run(title, category, tags, scholar, source_url, published_date, now, existing.id);
       return { id: existing.id, sha256_hash, status: 'updated' };
     }
 
@@ -308,11 +358,7 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
 
   // Insert new record
   const id = crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO fatwas (
-      id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  stmts.insert.run(
     id,
     source,
     source_url,
@@ -374,7 +420,8 @@ export function batchUpsertFatwas(items: IngestItemInput[]): {
  */
 export function getAllFatwas(): FatwaQA[] {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM fatwas ORDER BY published_date DESC, created_at DESC').all() as any[];
+  const stmts = getStatements(db);
+  const rows = stmts.getAll.all() as any[];
 
   return rows.map((r) => ({
     id: r.id,
@@ -399,7 +446,8 @@ export function getAllFatwas(): FatwaQA[] {
  */
 export function getFatwaById(id: string): FatwaQA | null {
   const db = getDb();
-  const r = db.prepare('SELECT * FROM fatwas WHERE id = ?').get(id) as any;
+  const stmts = getStatements(db);
+  const r = stmts.getById.get(id) as any;
   if (!r) return null;
 
   return {
@@ -425,17 +473,10 @@ export function getFatwaById(id: string): FatwaQA | null {
  */
 export function getFacets(): SearchFacets {
   const db = getDb();
-  const sourceRows = db
-    .prepare('SELECT source as name, COUNT(*) as count FROM fatwas GROUP BY source ORDER BY count DESC')
-    .all() as { name: string; count: number }[];
-
-  const categoryRows = db
-    .prepare('SELECT category as name, COUNT(*) as count FROM fatwas GROUP BY category ORDER BY count DESC')
-    .all() as { name: string; count: number }[];
-
-  const scholarRows = db
-    .prepare("SELECT scholar as name, COUNT(*) as count FROM fatwas WHERE scholar IS NOT NULL AND scholar != '' GROUP BY scholar ORDER BY count DESC")
-    .all() as { name: string; count: number }[];
+  const stmts = getStatements(db);
+  const sourceRows = stmts.sources.all() as { name: string; count: number }[];
+  const categoryRows = stmts.categories.all() as { name: string; count: number }[];
+  const scholarRows = stmts.scholars.all() as { name: string; count: number }[];
 
   return {
     sources: sourceRows,
