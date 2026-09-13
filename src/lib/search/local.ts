@@ -273,34 +273,79 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       (transliterated.isBanglish && ['oju', 'ojoo', 'wudu', 'wuzu', 'wudhu'].some((w) => rawQuery.toLowerCase().includes(w)))
       || queryTokens.some((t) => isAblutionTerm(t));
 
-    // Extract AI Semantic Intent in background (cached & safe timeout)
+    // Extract AI Semantic Intent (cached in memory & safe 3.5s timeout)
     const aiIntent = await extractSemanticFiqhIntent(rawQuery);
-    if (aiIntent?.fiqhTerms) {
-      aiIntent.fiqhTerms.forEach((ft) => {
+    if (aiIntent?.fiqhConcepts) {
+      aiIntent.fiqhConcepts.forEach((ft) => {
         expandedSynonyms.add(ft);
         highlightTerms.add(ft);
       });
     }
+    if (aiIntent?.essentialKeywords) {
+      aiIntent.essentialKeywords.forEach((ek) => {
+        expandedSynonyms.add(ek);
+        highlightTerms.add(ek);
+      });
+    }
 
-    const cleanFtsTerm = (t: string) => t.replace(/["*^:()\-]/g, ' ').trim();
+    const cleanFtsTerm = (t: string) => t.replace(/["*^:()\-/\\]/g, ' ').trim();
+
+    const rawSubject = cleanFtsTerm(aiIntent?.coreSubject || '');
+    const subjectTokens = rawSubject
+      ? rawSubject.split(/[\s,.;:!?"'()\-–—\/\\]+/).map(cleanFtsTerm).filter((t) => t.length >= 2 && !isStopWord(t))
+      : [];
+    const subjectPool = Array.from(
+      new Set([
+        ...subjectTokens,
+        ...subjectTokens.flatMap((t) => getSynonymsAndVariants(t)),
+        ...(!isStopWord(rawSubject) && rawSubject.length >= 2 ? [rawSubject, ...getSynonymsAndVariants(rawSubject)] : []),
+      ])
+    )
+      .map(cleanFtsTerm)
+      .filter((t) => t.length >= 2 && !isStopWord(t));
+
+    const rawAspect = cleanFtsTerm(aiIntent?.coreAspect || '');
+    const rawAspectTokens = rawAspect
+      ? rawAspect.split(/[\s,.;:!?"'()\-–—\/\\]+/).map(cleanFtsTerm).filter((t) => t.length >= 2 && !isStopWord(t))
+      : [];
+    const essentialTokens = (aiIntent?.essentialKeywords || [])
+      .map(cleanFtsTerm)
+      .filter((k) => k.length >= 2 && !isStopWord(k) && !subjectPool.includes(k));
+
+    const aspectPool = Array.from(
+      new Set([
+        ...rawAspectTokens,
+        ...essentialTokens,
+        ...rawAspectTokens.flatMap((t) => getSynonymsAndVariants(t)),
+        ...essentialTokens.flatMap((t) => getSynonymsAndVariants(t)),
+      ])
+    )
+      .map(cleanFtsTerm)
+      .filter((t) => t.length >= 2 && !isStopWord(t));
+
+    const fiqhConcepts = (aiIntent?.fiqhConcepts || []).map(cleanFtsTerm).filter(Boolean);
 
     // 2. High-Precision FTS5 Query Construction
     let ftsMatch = '';
+    const phraseClauses: string[] = [];
+    const conjunctions: string[] = [];
 
     if (queryTokens.length >= 2) {
       const phrases: string[] = [
         cleanFtsTerm(primaryQuery),
         cleanFtsTerm(rawQuery),
-        ...(aiIntent?.fiqhTerms || []).map(cleanFtsTerm),
+        ...(aiIntent?.canonicalBengali ? [cleanFtsTerm(aiIntent.canonicalBengali)] : []),
+        ...fiqhConcepts,
       ].filter((p) => p && p.length >= 2);
 
-      const phraseClauses = Array.from(new Set(phrases)).map((p) => `"${p}"*`);
+      phraseClauses.push(...Array.from(new Set(phrases)).map((p) => `"${p}"*`));
 
-      // Subject + Action or multi-token conjunctions
-      const mainTokens = queryTokens.slice(0, 3).map(cleanFtsTerm).filter(Boolean);
-      const andClause = mainTokens.map((t) => `"${t}"*`).join(' AND ');
-
-      const conjunctions: string[] = [`(${andClause})`];
+      // AI Subject + Aspect Conjunction (The Primary Legal Intent Bridge)
+      if (subjectPool.length > 0 && aspectPool.length > 0) {
+        const subjClause = '(' + subjectPool.slice(0, 8).map((s) => `"${s}"*`).join(' OR ') + ')';
+        const aspectClause = '(' + aspectPool.slice(0, 8).map((a) => `"${a}"*`).join(' OR ') + ')';
+        conjunctions.push(`(${subjClause} AND ${aspectClause})`);
+      }
 
       // Special handling for common posture / ritual queries (e.g. Sijda + Sitting)
       const hasSijdaWord = queryTokens.some((t) => t.includes('সিজদ'));
@@ -313,27 +358,26 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         conjunctions.push('("দুই"* AND "সিজদা"*)');
       }
 
-      // Conjunction of expanded synonym groups
+      // Lexical multi-token conjunction
+      const mainTokens = queryTokens.slice(0, 3).map(cleanFtsTerm).filter((t) => t.length >= 2);
       if (mainTokens.length >= 2) {
         const groupAnd = mainTokens
           .map((t) => {
-            const syns = getSynonymsAndVariants(t).slice(0, 3).map(cleanFtsTerm).filter(Boolean);
+            const syns = getSynonymsAndVariants(t).slice(0, 4).map(cleanFtsTerm).filter((s) => s.length >= 2);
             return '(' + syns.map((s) => `"${s}"*`).join(' OR ') + ')';
           })
           .join(' AND ');
         conjunctions.push(`(${groupAnd})`);
       }
-
-      ftsMatch = Array.from(new Set([...phraseClauses, ...conjunctions])).join(' OR ');
     } else {
       const single = cleanFtsTerm(queryTokens[0] || primaryQuery);
       const syns = getSynonymsAndVariants(single).slice(0, 8).map(cleanFtsTerm).filter(Boolean);
-      ftsMatch = syns.map((s) => `"${s}"*`).join(' OR ');
+      phraseClauses.push(...syns.map((s) => `"${s}"*`));
     }
 
     // Filter clauses
     const whereClauses: string[] = ['fatwas_fts MATCH ?'];
-    const filterParams: any[] = [ftsMatch];
+    const filterParams: any[] = [''];
 
     if (sourceFilter) {
       whereClauses.push('LOWER(f.source) = ?');
@@ -351,26 +395,38 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     const whereSql = whereClauses.join(' AND ');
     const hasFilters = Boolean(sourceFilter || categoryFilter || scholarFilter);
 
-    // Fast candidate retrieval: Fetch top candidate IDs and BM25 rank
-    let candidateRows = db.prepare(`
-      SELECT fts.id, bm25(fatwas_fts, 5.0, 3.0, 1.0, 1.0, 1.0, 1.5) as rank
-      FROM fatwas_fts fts
-      JOIN fatwas f ON f.id = fts.id
-      WHERE ${whereSql}
-      ORDER BY rank
-      LIMIT 150
-    `).all(...filterParams) as Array<{ id: string; rank: number }>;
+    // Precision-First Candidate Retrieval
+    let candidateRows: Array<{ id: string; rank: number }> = [];
 
-    // Graceful fallback: If precision query returned 0 candidates, broaden query
-    if (candidateRows.length === 0 && queryTokens.length >= 2) {
-      const fallbackTerms = Array.from(
-        new Set([rawQuery, primaryQuery, ...queryTokens, ...Array.from(expandedSynonyms).slice(0, 6)])
-      )
-        .map(cleanFtsTerm)
-        .filter((t) => t.length > 0);
-      const fallbackMatch = fallbackTerms.map((t) => `"${t}"*`).join(' OR ');
-      filterParams[0] = fallbackMatch;
-      ftsMatch = fallbackMatch;
+    if (conjunctions.length > 0) {
+      ftsMatch = conjunctions.join(' OR ');
+      filterParams[0] = ftsMatch;
+
+      candidateRows = db.prepare(`
+        SELECT fts.id, bm25(fatwas_fts, 5.0, 3.0, 1.0, 1.0, 1.0, 1.5) as rank
+        FROM fatwas_fts fts
+        JOIN fatwas f ON f.id = fts.id
+        WHERE ${whereSql}
+        ORDER BY rank
+        LIMIT 150
+      `).all(...filterParams) as Array<{ id: string; rank: number }>;
+    }
+
+    // Tier 2: If conjunction yielded 0 candidates, try phrase and keyword expansion
+    if (candidateRows.length === 0) {
+      const fallbackPool = [
+        ...phraseClauses,
+        ...(subjectPool.length > 0 && aspectPool.length > 0
+          ? [...subjectPool.slice(0, 4), ...aspectPool.slice(0, 4)].map((t) => `"${cleanFtsTerm(t)}"*`)
+          : queryTokens.map((t) => `"${cleanFtsTerm(t)}"*`)),
+      ];
+      ftsMatch = Array.from(new Set(fallbackPool.filter(Boolean))).join(' OR ');
+      if (!ftsMatch) {
+        const single = cleanFtsTerm(queryTokens[0] || primaryQuery);
+        ftsMatch = getSynonymsAndVariants(single).slice(0, 8).map((s) => `"${cleanFtsTerm(s)}"*`).join(' OR ');
+      }
+
+      filterParams[0] = ftsMatch;
 
       candidateRows = db.prepare(`
         SELECT fts.id, bm25(fatwas_fts, 5.0, 3.0, 1.0, 1.0, 1.0, 1.5) as rank
@@ -381,6 +437,17 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         LIMIT 100
       `).all(...filterParams) as Array<{ id: string; rank: number }>;
     }
+
+    // Deduplicate candidate rows by id in memory
+    const seenCandidateIds = new Set<string>();
+    const uniqueCandidateRows: Array<{ id: string; rank: number }> = [];
+    for (const row of candidateRows) {
+      if (!seenCandidateIds.has(row.id)) {
+        seenCandidateIds.add(row.id);
+        uniqueCandidateRows.push(row);
+      }
+    }
+    candidateRows = uniqueCandidateRows;
 
     // Total count for pagination
     let total = 0;
@@ -435,7 +502,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       'দুই সিজদার মাঝে বসা',
       'সিজদার পর বসা',
       'দুই সিজদার পর',
-      ...(aiIntent?.fiqhTerms || []),
+      ...fiqhConcepts,
     ].map((t) => t.toLowerCase());
 
     for (const d of docs) {
@@ -449,41 +516,88 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       const titleLower = (doc.title || '').toLowerCase();
       const questionLower = (doc.question || '').toLowerCase();
       const answerLower = (doc.answer || '').toLowerCase();
+      const qCombined = titleLower + ' ' + questionLower;
+      const aCombined = answerLower;
       const matchedForDoc = new Set<string>();
 
-      // Exact full query phrase match
+      // 1. Exact full query phrase match
       if (titleLower.includes(normalizedQuery.toLowerCase()) || titleLower.includes(primaryQuery.toLowerCase())) {
-        score += 160.0;
+        score += 240.0;
         matchedForDoc.add(primaryQuery);
       } else if (questionLower.includes(normalizedQuery.toLowerCase()) || questionLower.includes(primaryQuery.toLowerCase())) {
-        score += 90.0;
+        score += 160.0;
         matchedForDoc.add(primaryQuery);
       }
 
-      // AI Fiqh Concept Matches
+      if (aiIntent?.canonicalBengali) {
+        const canL = aiIntent.canonicalBengali.toLowerCase();
+        if (titleLower.includes(canL)) {
+          score += 260.0;
+          matchedForDoc.add(aiIntent.canonicalBengali);
+        } else if (questionLower.includes(canL)) {
+          score += 180.0;
+          matchedForDoc.add(aiIntent.canonicalBengali);
+        }
+      }
+
+      // 2. AI Fiqh Concept Matches
       for (const term of allFiqhTerms) {
         if (titleLower.includes(term)) {
-          score += 180.0;
+          score += 220.0;
           matchedForDoc.add(term);
         } else if (questionLower.includes(term)) {
-          score += 130.0;
+          score += 160.0;
           matchedForDoc.add(term);
         } else if (answerLower.includes(term)) {
-          score += 60.0;
+          score += 80.0;
           matchedForDoc.add(term);
         }
       }
 
-      // Check token and synonym matches
+      // 3. AI Subject & Aspect Co-occurrence Scoring (The Core Fiqh Intent Engine)
+      if (subjectPool.length > 0 && aspectPool.length > 0) {
+        const hasSubjInQ = subjectPool.some((s) => qCombined.includes(s.toLowerCase()));
+        const hasSubjInA = subjectPool.some((s) => aCombined.includes(s.toLowerCase()));
+        const hasAspectInQ = aspectPool.some((a) => qCombined.includes(a.toLowerCase()));
+        const hasAspectInA = aspectPool.some((a) => aCombined.includes(a.toLowerCase()));
+
+        if (hasSubjInQ && hasAspectInQ) {
+          // Both subject and specific fiqh issue are explicitly present in the question/title
+          score += 420.0;
+        } else if (hasSubjInQ && hasAspectInA) {
+          // Question sets the subject context, and the fatwa answer directly resolves the issue
+          score += 300.0;
+        } else if (hasAspectInQ && hasSubjInA) {
+          score += 280.0;
+        } else if (hasSubjInA && hasAspectInA) {
+          score += 180.0;
+        } else if (hasSubjInQ && !hasAspectInQ && !hasAspectInA && queryTokens.length >= 2) {
+          // Matched subject only (e.g. random Roza fatwa without injection) -> suppress false positives
+          score *= 0.12;
+        } else if (hasAspectInQ && !hasSubjInQ && !hasSubjInA && queryTokens.length >= 2) {
+          score *= 0.25;
+        }
+      }
+
+      // 4. Check token and synonym matches & coverage
+      let matchedTokensCount = 0;
       for (const token of queryTokens) {
         if (titleLower.includes(token)) {
-          score += 35.0;
+          score += 40.0;
+          matchedTokensCount++;
           matchedForDoc.add(token);
-        }
-        if (questionLower.includes(token)) {
-          score += 15.0;
+        } else if (questionLower.includes(token)) {
+          score += 22.0;
+          matchedTokensCount++;
           matchedForDoc.add(token);
+        } else if (answerLower.includes(token)) {
+          score += 8.0;
         }
+      }
+
+      if (queryTokens.length > 0) {
+        const coverageRatio = matchedTokensCount / queryTokens.length;
+        score += coverageRatio * 90.0;
       }
 
       for (const syn of expandedSynonyms) {
@@ -491,7 +605,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
           score += 30.0;
           matchedForDoc.add(syn);
         } else if (questionLower.includes(syn)) {
-          score += 12.0;
+          score += 14.0;
           matchedForDoc.add(syn);
         } else if (answerLower.includes(syn)) {
           score += 4.0;
@@ -499,7 +613,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         }
       }
 
-      // Co-occurrence of Subject and Action (e.g. Sijda + Sitting)
+      // 5. Co-occurrence of Subject and Action for posture queries (e.g. Sijda + Sitting)
       const hasSijda = titleLower.includes('সিজদা') || questionLower.includes('সিজদা');
       const hasBosa =
         titleLower.includes('বসা') ||
@@ -516,15 +630,14 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         questionLower.includes('মাঝে');
 
       if (hasSijda && hasBosa && hasPor) {
-        score += 140.0;
+        score += 160.0;
       } else if (hasSijda && hasBosa) {
-        score += 90.0;
+        score += 100.0;
       } else if (hasSijda && !hasBosa && queryTokens.some((t) => t.includes('বস') || t.includes('বৈঠক'))) {
-        // Query specifically asked for sitting after/between sijda, but document only mentions sijda
         score = score * 0.15;
       }
 
-      // Phonetic matching
+      // 6. Phonetic matching
       const docPhonetics = extractPhoneticTokens(doc.title + ' ' + (doc.question || '').slice(0, 100));
       for (const p of expandedPhonetics) {
         if (docPhonetics.includes(p)) {
@@ -532,7 +645,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         }
       }
 
-      // Ablution disambiguation & false-positive suppression
+      // 7. Ablution disambiguation & false-positive suppression
       if (queryIsAblution) {
         const ablutionWords = ['ওযু', 'অজু', 'উযু', 'উজু', 'ওজু', 'ওযূ', 'উযূ'];
         const hasAblutionInTitle = ablutionWords.some((w) =>
