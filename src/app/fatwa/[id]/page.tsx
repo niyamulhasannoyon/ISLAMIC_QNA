@@ -349,7 +349,7 @@ export default async function FatwaPage({ params }: Props) {
               </h2>
             </div>
 
-            <div className="prose prose-zinc dark:prose-invert max-w-none text-base sm:text-lg font-bengali leading-relaxed text-zinc-900 dark:text-zinc-100 whitespace-pre-line selection:bg-emerald-500/20">
+            <div className="prose prose-zinc dark:prose-invert max-w-none text-base sm:text-lg font-bengali leading-relaxed text-zinc-900 dark:text-zinc-100 whitespace-pre-line selection:bg-emerald-500/25 selection:text-emerald-950 dark:selection:bg-emerald-500/35 dark:selection:text-emerald-100">
               {fatwa.answer}
             </div>
           </section>

@@ -139,7 +139,7 @@ export default function RootLayout({
         {/* Google Identity Services SDK for Sign in with Google */}
         <script src="https://accounts.google.com/gsi/client" async defer />
       </head>
-      <body className="min-h-screen bg-[#09090b] text-zinc-100 font-sans antialiased selection:bg-emerald-500/20 selection:text-emerald-200">
+      <body className="min-h-screen bg-[#09090b] text-zinc-100 font-sans antialiased selection:bg-emerald-500/25 selection:text-emerald-950 dark:selection:bg-emerald-500/35 dark:selection:text-emerald-100">
         <LanguageProvider>
           <Suspense fallback={null}>
             <AnalyticsTracker />

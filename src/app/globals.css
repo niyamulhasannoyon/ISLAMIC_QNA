@@ -115,3 +115,15 @@ mark {
   background: rgba(5, 150, 105, 0.07);
 }
 
+/* Custom Text Selection Ergonomics for High Contrast & Readability */
+::selection {
+  background-color: rgba(16, 185, 129, 0.22);
+  color: #042f2e;
+}
+
+.dark ::selection {
+  background-color: rgba(16, 185, 129, 0.35);
+  color: #ecfdf5;
+}
+
+
