@@ -45,6 +45,17 @@ const STOP_WORDS = new Set([
   'উপর', 'উপরে', 'নিচে', 'নীচে', 'সাথে', 'সহ', 'সহকারে', 'দ্বারা', 'দিয়ে', 'দিয়ে',
   'প্রতি', 'মতো', 'মত', 'কারণ', 'কারণে', 'ফলে',
   'সে', 'তা', 'তার', 'তাদের', 'তাকে', 'এমনি', 'এমন', 'এরকম', 'ঐ', 'ওই', 'এই', 'এ',
+  // Banglish Grammatical Inflections & Stop Words
+  'er', 'r', 'e', 'te', 'ti', 'ta', 'jon', 'khan', 'khana', 'khani',
+  'sob', 'sokol', 'shob', 'shokol', 'shomostho', 'somosto',
+  'jonno', 'jonne', 'theke', 'hote', 'por', 'pore', 'age', 'upor', 'upore',
+  'niche', 'neeche', 'shathe', 'sathe', 'shoho', 'dara', 'diye', 'proti',
+  'moto', 'mot', 'karon', 'karone', 'fole', 'se', 'ta', 'tar', 'tader', 'take',
+  'ei', 'oi', 'ki', 'kee', 'ke', 'keno', 'kothay', 'kokhon', 'kivabe', 'kina',
+  'hobe', 'hole', 'hoy', 'hoye', 'howa', 'korle', 'kora', 'korar', 'kore',
+  'jay', 'jabe', 'dile', 'dewa', 'deya', 'neya', 'obostha', 'obosthay',
+  'kon', 'kono', 'je', 'ja', 'jar', 'ebong', 'ba', 'othoba', 'kintu', 'o', 'ar',
+  'somporke', 'bishoye', 'bapare', 'niye', 'chara', 'chada',
 ]);
 
 /**

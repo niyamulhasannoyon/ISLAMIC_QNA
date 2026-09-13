@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { batchUpsertFatwas } from '@/lib/db';
+import { syncFatwaBatch } from '@/lib/pipeline/ingest';
 import { refreshSearchIndex } from '@/lib/search';
-import { IngestItemInput, FatwaSource } from '@/types/fatwa';
+import { IngestItemInput } from '@/types/fatwa';
 import { computeFatwaHash, isValidSha256 } from '@/lib/hash';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,6 @@ const FatwaItemSchema = z.object({
   published_date: z.string().optional(),
   sha256_hash: z.string().optional(),
   scraped_at: z.string().optional(),
-  // Backwards compatibility keys
   hash: z.string().optional(),
   createdAt: z.string().optional(),
 });
@@ -59,7 +58,6 @@ function verifyToken(req: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Authenticate request via Bearer token
     if (!verifyToken(req)) {
       return NextResponse.json(
         { error: 'Unauthorized: Invalid or missing secret bearer ingestion token' },
@@ -67,7 +65,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse and validate payload
     const body = await req.json();
     const parseResult = IngestPayloadSchema.safeParse(body);
 
@@ -81,7 +78,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Extract items list
     let rawItems: any[] = [];
     const data = parseResult.data;
 
@@ -100,7 +96,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Verify & Canonicalize SHA-256 hash (question + answer) for zero duplicate writes
     const validatedItems: IngestItemInput[] = rawItems.map((item) => {
       const computedHash = computeFatwaHash({
         question: item.question,
@@ -111,12 +106,7 @@ export async function POST(req: NextRequest) {
       let finalHash = computedHash;
 
       if (providedHash && isValidSha256(providedHash)) {
-        if (providedHash.toLowerCase() !== computedHash.toLowerCase()) {
-          // Verify hash: if tampered or mismatched, enforce computed SHA-256 derived from question + answer
-          finalHash = computedHash;
-        } else {
-          finalHash = providedHash.toLowerCase();
-        }
+        finalHash = providedHash.toLowerCase();
       }
 
       return {
@@ -134,10 +124,8 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // 5. Perform idempotent batch upsert into SQLite
-    const batchResult = batchUpsertFatwas(validatedItems);
+    const batchResult = await syncFatwaBatch(validatedItems);
 
-    // 6. Instantly refresh search index if new records were inserted or updated
     if (batchResult.inserted > 0 || batchResult.updated > 0) {
       await refreshSearchIndex();
     }
@@ -148,8 +136,9 @@ export async function POST(req: NextRequest) {
       updated: batchResult.updated,
       skipped: batchResult.skipped,
       total: batchResult.total,
+      storage: batchResult.storage,
       items: batchResult.results,
-      message: `Processed ${batchResult.total} items (inserted: ${batchResult.inserted}, updated: ${batchResult.updated}, skipped: ${batchResult.skipped})`,
+      message: `Processed ${batchResult.total} items via ${batchResult.storage} (inserted: ${batchResult.inserted}, updated: ${batchResult.updated}, skipped: ${batchResult.skipped})`,
     });
   } catch (error: any) {
     console.error('Ingestion error:', error);

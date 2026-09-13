@@ -217,6 +217,7 @@ const ISLAMIC_BANGLISH_DICT: Record<string, string[]> = {
   'fatwah': ['ফতোয়া', 'ফতোয়া'],
 
   // Query Intent & Grammar Words
+  'er': ['এর'],
   'korar': ['করার', 'পড়ার'],
   'kora': ['করা'],
   'korle': ['করলে', 'করার'],

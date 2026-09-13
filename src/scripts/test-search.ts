@@ -145,7 +145,31 @@ async function runTests() {
   }
   console.log('Verified 15 complex results: 0 broken conjuncts, 0 orphaned vowel signs, 0 fractured words!');
 
-  console.log('\nAll 12 professional search test suites passed successfully!');
+  console.log('\n=== 13. Testing Satan / Waswasa & Stop-Word Contamination ("soitan er dhoka") ===');
+  const soitanRes = await searchFatwas({ q: 'soitan er dhoka' });
+  console.log(`Results for 'soitan er dhoka': ${soitanRes.total} (took ${soitanRes.tookMs}ms)`);
+  if (soitanRes.total === 0) {
+    throw new Error("Expected search 'soitan er dhoka' to return results");
+  }
+  console.log(`Top result title: ${soitanRes.results[0].title}`);
+
+  // Check top result is relevant to Satan/Waswasa/Deception
+  const topText = (soitanRes.results[0].title + ' ' + soitanRes.results[0].question + ' ' + soitanRes.results[0].answer).toLowerCase();
+  const isSatanRelevant = ['শয়তান', 'শয়তান', 'ওয়াসওয়াসা', 'ওয়াসওয়াসা', 'ধোঁকা', 'ধোকা', 'ইবলিস', 'কুমন্ত্রণা', 'কুচিন্তা'].some(w => topText.includes(w));
+  if (!isSatanRelevant) {
+    throw new Error("Expected top result for 'soitan er dhoka' to be relevant to Satan, Waswasa, or Deception");
+  }
+
+  // Verify 'er' / 'এর' is NEVER highlighted as a search term snippet mark
+  for (const res of soitanRes.results.slice(0, 10)) {
+    const snippetText = (res.titleSnippet || '') + ' ' + (res.snippet || '');
+    if (/<mark[^>]*>\s*(er|এর)\s*<\/mark>/i.test(snippetText)) {
+      throw new Error(`Stop-word contamination detected in result "${res.title}": 'er' / 'এর' was highlighted!`);
+    }
+  }
+  console.log("Verified 10 results for 'soitan er dhoka': zero 'er'/'এর' stop-word contamination in snippets!");
+
+  console.log('\nAll 13 professional search test suites passed successfully!');
 }
 
 runTests().catch((err) => {
