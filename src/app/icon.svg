@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3f3f46" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#10b981" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#27272a" stop-opacity="0.8"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e4e4e7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background container -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="14"/>
+
+  <!-- Subtle corner emerald accent dot -->
+  <circle cx="430" cy="82" r="10" fill="#10b981" opacity="0.9" />
+
+  <!-- Arabic Calligraphic Character 'فت' -->
+  <text 
+    x="50%" 
+    y="56%" 
+    text-anchor="middle" 
+    dominant-baseline="middle" 
+    fill="url(#textGrad)" 
+    font-family="'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Traditional Arabic', 'Geeza Pro', 'Arial', serif" 
+    font-size="270" 
+    font-weight="700"
+    letter-spacing="-2"
+    style="text-shadow: 0 4px 16px rgba(0,0,0,0.6);"
+  >فت</text>
+</svg>

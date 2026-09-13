@@ -326,7 +326,7 @@ export function FilterBar({
                     <span className="truncate font-bengali">{t.filters.allScholars}</span>
                   </div>
                 </button>
-                {scholarFacets.map((sch) => {
+                {scholarFacets.slice(0, 50).map((sch) => {
                   const isSelected = selectedScholar === sch.name;
                   return (
                     <button

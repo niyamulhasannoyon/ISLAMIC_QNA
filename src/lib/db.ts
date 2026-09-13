@@ -86,6 +86,32 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS fatwas_fts USING fts5(
+      id UNINDEXED,
+      title,
+      question,
+      answer,
+      category,
+      source,
+      scholar,
+      tokenize="unicode61"
+    );
+
+    CREATE TRIGGER IF NOT EXISTS fatwas_ai AFTER INSERT ON fatwas BEGIN
+      INSERT INTO fatwas_fts(id, title, question, answer, category, source, scholar)
+      VALUES (new.id, new.title, new.question, new.answer, new.category, new.source, new.scholar);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS fatwas_ad AFTER DELETE ON fatwas BEGIN
+      DELETE FROM fatwas_fts WHERE id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS fatwas_au AFTER UPDATE ON fatwas BEGIN
+      DELETE FROM fatwas_fts WHERE id = old.id;
+      INSERT INTO fatwas_fts(id, title, question, answer, category, source, scholar)
+      VALUES (new.id, new.title, new.question, new.answer, new.category, new.source, new.scholar);
+    END;
   `);
 
   // Handle auto-migration for existing SQLite tables
@@ -168,6 +194,21 @@ export function getDb(): Database.Database {
   // Auto-seed database from JSON datasets if running with 0 records (e.g. fresh Vercel /tmp instance)
   autoSeedIfEmpty(db);
 
+  // Ensure FTS5 index is populated
+  try {
+    const ftsCount = db.prepare('SELECT count(*) as c FROM fatwas_fts').pluck().get() as number;
+    const fatwasCount = db.prepare('SELECT count(*) as c FROM fatwas').pluck().get() as number;
+    if (ftsCount < fatwasCount) {
+      db.exec(`
+        DELETE FROM fatwas_fts;
+        INSERT INTO fatwas_fts(id, title, question, answer, category, source, scholar)
+        SELECT id, title, question, answer, category, source, scholar FROM fatwas;
+      `);
+    }
+  } catch (ftsErr) {
+    console.warn('[FTS Setup Warning]:', ftsErr);
+  }
+
   global.__fatwaDb = db;
   return db;
 }
@@ -210,7 +251,7 @@ function getStatements(db: Database.Database): DbStatements {
     count: db.prepare('SELECT count(*) as count FROM fatwas'),
     sources: db.prepare('SELECT source as name, COUNT(*) as count FROM fatwas GROUP BY source ORDER BY count DESC'),
     categories: db.prepare('SELECT category as name, COUNT(*) as count FROM fatwas GROUP BY category ORDER BY count DESC'),
-    scholars: db.prepare("SELECT scholar as name, COUNT(*) as count FROM fatwas WHERE scholar IS NOT NULL AND scholar != '' GROUP BY scholar ORDER BY count DESC"),
+    scholars: db.prepare("SELECT scholar as name, COUNT(*) as count FROM fatwas WHERE scholar IS NOT NULL AND scholar != '' GROUP BY scholar ORDER BY count DESC LIMIT 50"),
   };
 
   return cachedStatements;
@@ -350,6 +391,7 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
 
     if (hasChanged) {
       stmts.update.run(title, category, tags, scholar, source_url, published_date, now, existing.id);
+      invalidateFacetsCache();
       return { id: existing.id, sha256_hash, status: 'updated' };
     }
 
@@ -375,6 +417,7 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
     now
   );
 
+  invalidateFacetsCache();
   return { id, sha256_hash, status: 'inserted' };
 }
 
@@ -405,6 +448,10 @@ export function batchUpsertFatwas(items: IngestItemInput[]): {
   });
 
   runBatch(items);
+
+  if (inserted > 0 || updated > 0) {
+    invalidateFacetsCache();
+  }
 
   return {
     inserted,
@@ -468,19 +515,37 @@ export function getFatwaById(id: string): FatwaQA | null {
   };
 }
 
+let cachedFacets: { data: SearchFacets; expiresAt: number } | null = null;
+
+export function invalidateFacetsCache(): void {
+  cachedFacets = null;
+}
+
 /**
- * Computes source, category, and scholar aggregations.
+ * Computes source, category, and scholar aggregations with in-memory caching.
  */
 export function getFacets(): SearchFacets {
+  const now = Date.now();
+  if (cachedFacets && cachedFacets.expiresAt > now) {
+    return cachedFacets.data;
+  }
+
   const db = getDb();
   const stmts = getStatements(db);
   const sourceRows = stmts.sources.all() as { name: string; count: number }[];
   const categoryRows = stmts.categories.all() as { name: string; count: number }[];
   const scholarRows = stmts.scholars.all() as { name: string; count: number }[];
 
-  return {
+  const data: SearchFacets = {
     sources: sourceRows,
     categories: categoryRows,
     scholars: scholarRows,
   };
+
+  cachedFacets = {
+    data,
+    expiresAt: now + 5 * 60 * 1000, // 5 minutes TTL
+  };
+
+  return data;
 }

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 
 export function Header() {
@@ -35,9 +36,7 @@ export function Header() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
         {/* Brand & Editorial Archive Masthead */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="h-7 w-7 rounded border border-zinc-300 dark:border-zinc-700/80 bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-900 dark:text-zinc-100 shadow-sm shrink-0">
-            <span className="font-serif font-bold text-xs">فت</span>
-          </div>
+          <Logo size="sm" />
           <div className="flex items-baseline gap-2">
             <span
               className={cn(

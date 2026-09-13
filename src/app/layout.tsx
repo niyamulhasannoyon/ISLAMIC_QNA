@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   title: "Islamic Fatwa & Research Archive | Al-I'tisam & At-Tahreek",
   description: "An editorial-grade digital research archive and search engine aggregating authentic fatwas and Islamic Q&As from Al-I'tisam, At-Tahreek, and verified scholarly collections.",
   keywords: ["Fatwa", "Islamic Q&A", "Al-I'tisam", "At-Tahreek", "ফিকহ", "সালাত", "যাকাত", "হাদীস", "Search", "Editorial Archive"],
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/apple-icon", type: "image/png", sizes: "180x180" },
+    ],
+    shortcut: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -1,10 +1,9 @@
-import MiniSearch, { SearchResult } from 'minisearch';
 import { FatwaQA, SearchQueryOptions, SearchResponse, SearchResultItem } from '@/types/fatwa';
-import { getAllFatwas, getFacets } from '../db';
+import { getDb, getFacets } from '../db';
 import { escapeRegExp } from '../utils';
 import { normalizeBengaliText, stemBengaliToken, isStopWord } from './normalizer';
 import { encodeBengaliPhonetic, extractPhoneticTokens } from './phonetic';
-import { transliterateQuery, isLatinScript } from './transliterate';
+import { transliterateQuery } from './transliterate';
 import { getSynonymsAndVariants, isAblutionTerm } from './synonyms';
 import { SearchEngine } from './types';
 
@@ -101,137 +100,30 @@ export function generateHighlightedSnippet(
   return escaped;
 }
 
-interface IndexedDoc extends FatwaQA {
-  searchKeywords: string;
-  phoneticCodes: string;
-  stemmedTokens: string;
-}
-
 export class LocalBengaliSearchEngine implements SearchEngine {
   public name = 'Professional Bengali Phonetic Engine';
-  private index: MiniSearch<IndexedDoc> | null = null;
-  private docMap: Map<string, FatwaQA> = new Map();
-
-  private createMiniSearch(): MiniSearch<IndexedDoc> {
-    return new MiniSearch<IndexedDoc>({
-      fields: [
-        'title',
-        'question',
-        'answer',
-        'category',
-        'source',
-        'scholar',
-        'tagsString',
-        'searchKeywords',
-        'phoneticCodes',
-        'stemmedTokens',
-      ],
-      storeFields: [
-        'id',
-        'source',
-        'source_url',
-        'title',
-        'question',
-        'answer',
-        'category',
-        'tags',
-        'scholar',
-        'published_date',
-        'sha256_hash',
-        'scraped_at',
-      ],
-      searchOptions: {
-        boost: {
-          title: 4.5,
-          searchKeywords: 3.5,
-          question: 2.5,
-          tagsString: 2.0,
-          scholar: 1.5,
-          stemmedTokens: 1.5,
-          phoneticCodes: 1.2,
-          answer: 1.0,
-        },
-        fuzzy: 0.2,
-        prefix: true,
-        combineWith: 'AND',
-      },
-      extractField: (doc, fieldName) => {
-        if (fieldName === 'tagsString') {
-          return Array.isArray(doc.tags) ? doc.tags.join(' ') : '';
-        }
-        return (doc as any)[fieldName] || '';
-      },
-      // Unicode-aware tokenizer supporting Bengali, Latin, Arabic, and numbers
-      tokenize: (text) => {
-        if (!text) return [];
-        const norm = normalizeBengaliText(text).toLowerCase();
-        const tokens = norm.match(/[\p{L}\p{M}\p{N}]+/gu);
-        return tokens ? tokens : [];
-      },
-    });
-  }
 
   public async init(): Promise<void> {
-    const all = getAllFatwas();
-    await this.indexDocuments(all);
+    getDb();
   }
 
   public async indexDocuments(docs: FatwaQA[]): Promise<void> {
-    const newIndex = this.createMiniSearch();
-    const newMap = new Map<string, FatwaQA>();
-    const indexedDocs: IndexedDoc[] = [];
+    const db = getDb();
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO fatwas_fts (id, title, question, answer, category, source, scholar)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
 
-    for (const d of docs) {
-      newMap.set(d.id, d);
-
-      const titleWords = (d.title || '').split(/[\s,.;:!?"'()\-–—\/\\]+/).filter(Boolean);
-      const questionWords = (d.question || '').split(/[\s,.;:!?"'()\-–—\/\\]+/).filter(Boolean);
-      const tagsList = Array.isArray(d.tags) ? d.tags : [];
-
-      const keywordsSet = new Set<string>();
-      const phoneticSet = new Set<string>();
-      const stemSet = new Set<string>();
-
-      // Extract title & question keywords and expand with domain synonyms
-      for (const word of [...titleWords, ...tagsList, ...questionWords.slice(0, 30)]) {
-        if (word.length < 2) continue;
-        const normWord = normalizeBengaliText(word).toLowerCase();
-        const stemmed = stemBengaliToken(normWord);
-        stemSet.add(stemmed);
-
-        const synonyms = getSynonymsAndVariants(normWord);
-        synonyms.forEach((s) => keywordsSet.add(s));
-
-        const phonetic = encodeBengaliPhonetic(normWord);
-        if (phonetic && phonetic.length >= 2) {
-          phoneticSet.add(phonetic);
-        }
+    db.transaction(() => {
+      for (const d of docs) {
+        insertStmt.run(d.id, d.title, d.question, d.answer, d.category, d.source, d.scholar);
       }
-
-      // Also extract phonetics from full title
-      extractPhoneticTokens(d.title).forEach((p) => phoneticSet.add(p));
-
-      indexedDocs.push({
-        ...d,
-        searchKeywords: Array.from(keywordsSet).join(' '),
-        phoneticCodes: Array.from(phoneticSet).join(' '),
-        stemmedTokens: Array.from(stemSet).join(' '),
-      });
-    }
-
-    if (indexedDocs.length > 0) {
-      newIndex.addAll(indexedDocs);
-    }
-
-    this.index = newIndex;
-    this.docMap = newMap;
+    })();
   }
 
   public async search(options: SearchQueryOptions): Promise<SearchResponse> {
     const startTime = Date.now();
-    if (!this.index) {
-      await this.init();
-    }
+    const db = getDb();
 
     const rawQuery = (options.q || '').trim();
     const sourceFilter = options.source && options.source !== 'All' ? options.source.toLowerCase() : undefined;
@@ -239,38 +131,47 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     const scholarFilter = options.scholar && options.scholar !== 'All' ? options.scholar.toLowerCase() : undefined;
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
+    const offset = (page - 1) * limit;
 
-    let results: SearchResultItem[] = [];
-
-    // Browse mode (empty query)
+    // 1. Browse mode (empty query) - Instant direct SQLite indexed scan (~1-2 ms)
     if (!rawQuery) {
-      let docs = Array.from(this.docMap.values());
+      const whereClauses: string[] = [];
+      const params: any[] = [];
 
       if (sourceFilter) {
-        docs = docs.filter((d) => d.source.toLowerCase() === sourceFilter);
+        whereClauses.push('LOWER(source) = ?');
+        params.push(sourceFilter);
       }
       if (categoryFilter) {
-        docs = docs.filter((d) => d.category.toLowerCase() === categoryFilter);
+        whereClauses.push('LOWER(category) = ?');
+        params.push(categoryFilter);
       }
       if (scholarFilter) {
-        docs = docs.filter((d) => (d.scholar || '').toLowerCase().includes(scholarFilter));
+        whereClauses.push('LOWER(scholar) LIKE ?');
+        params.push(`%${scholarFilter}%`);
       }
 
-      docs.sort((a, b) => new Date(b.published_date || b.created_at || '').getTime() - new Date(a.published_date || a.created_at || '').getTime());
+      const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-      const total = docs.length;
-      const startIndex = (page - 1) * limit;
-      const paginated = docs.slice(startIndex, startIndex + limit);
+      const countRow = db.prepare(`SELECT count(*) as count FROM fatwas ${whereSql}`).get(...params) as { count: number };
+      const total = countRow.count;
 
-      results = paginated.map((doc) => ({
-        ...doc,
+      const rows = db.prepare(`
+        SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+        FROM fatwas
+        ${whereSql}
+        ORDER BY published_date DESC, created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(...params, limit, offset) as any[];
+
+      const results: SearchResultItem[] = rows.map((r) => ({
+        ...r,
+        tags: JSON.parse(r.tags || '[]'),
         score: 1.0,
-        snippet: generateHighlightedSnippet(doc.answer || doc.question, []),
-        titleSnippet: escapeHtml(doc.title),
+        snippet: generateHighlightedSnippet(r.answer || r.question, []),
+        titleSnippet: escapeHtml(r.title),
         matchedTerms: [],
       }));
-
-      const facets = getFacets();
 
       return {
         results,
@@ -280,11 +181,11 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         totalPages: Math.ceil(total / limit) || 1,
         tookMs: Date.now() - startTime,
         engine: this.name,
-        facets,
+        facets: getFacets(),
       };
     }
 
-    // Step 1: Query Pre-Processing & Transliteration
+    // 2. Full-Text Search Mode
     const transliterated = transliterateQuery(rawQuery);
     const primaryQuery = transliterated.primaryBengali || rawQuery;
     const normalizedQuery = normalizeBengaliText(primaryQuery);
@@ -293,13 +194,11 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     const nonStopTokens = rawTokens.filter((t) => !isStopWord(t));
     const queryTokens = nonStopTokens.length > 0 ? nonStopTokens : rawTokens;
 
-    // Step 2: Query Expansion (Synonyms, Stemmed roots, Phonetic codes)
     const expandedSynonyms = new Set<string>();
     const expandedPhonetics = new Set<string>();
     const expandedStems = new Set<string>();
     const highlightTerms = new Set<string>();
 
-    // Add transliteration candidates
     transliterated.expandedTerms.forEach((t) => {
       highlightTerms.add(t);
       const synonyms = getSynonymsAndVariants(t);
@@ -323,44 +222,110 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       }
     }
 
-    // Check if query is targeting ablution/wudu
     const queryIsAblution =
-      transliterated.isBanglish && ['oju', 'ojoo', 'wudu', 'wuzu', 'wudhu'].some((w) => rawQuery.toLowerCase().includes(w))
+      (transliterated.isBanglish && ['oju', 'ojoo', 'wudu', 'wuzu', 'wudhu'].some((w) => rawQuery.toLowerCase().includes(w)))
       || queryTokens.some((t) => isAblutionTerm(t));
 
-    // Step 3: Multi-layer MiniSearch Search
-    const filterFn = (doc: any) => {
-      if (sourceFilter && doc.source.toLowerCase() !== sourceFilter) return false;
-      if (categoryFilter && doc.category.toLowerCase() !== categoryFilter) return false;
-      if (scholarFilter && !(doc.scholar || '').toLowerCase().includes(scholarFilter)) return false;
-      return true;
-    };
+    // Construct sanitized FTS5 MATCH query
+    const cleanFtsTerm = (t: string) => t.replace(/["*^:()\-]/g, ' ').trim();
+    const candidateTerms = Array.from(
+      new Set([rawQuery, primaryQuery, ...queryTokens, ...Array.from(expandedSynonyms).slice(0, 10)])
+    )
+      .map(cleanFtsTerm)
+      .filter((t) => t.length > 0);
 
-    // Construct synthesized search query combining primary words + key synonyms
-    const topSynonyms = Array.from(expandedSynonyms).slice(0, 8);
-    const searchString = Array.from(new Set([primaryQuery, ...queryTokens, ...topSynonyms])).join(' ');
+    const ftsMatch = candidateTerms.map((t) => `"${t}"*`).join(' OR ');
 
-    let searchResults = this.index!.search(searchString, {
-      filter: filterFn,
-      combineWith: 'OR',
-      fuzzy: 0.25,
-      prefix: true,
-    });
+    // Filter clauses
+    const whereClauses: string[] = ['fatwas_fts MATCH ?'];
+    const filterParams: any[] = [ftsMatch];
 
-    // Step 4: Intelligent Re-ranking & Precision Relevance Scoring
+    if (sourceFilter) {
+      whereClauses.push('LOWER(f.source) = ?');
+      filterParams.push(sourceFilter);
+    }
+    if (categoryFilter) {
+      whereClauses.push('LOWER(f.category) = ?');
+      filterParams.push(categoryFilter);
+    }
+    if (scholarFilter) {
+      whereClauses.push('LOWER(f.scholar) LIKE ?');
+      filterParams.push(`%${scholarFilter}%`);
+    }
+
+    const whereSql = whereClauses.join(' AND ');
+    const hasFilters = Boolean(sourceFilter || categoryFilter || scholarFilter);
+
+    // Fast candidate retrieval: Fetch top candidate IDs and BM25 rank
+    const candidateRows = db.prepare(`
+      SELECT fts.id, bm25(fatwas_fts, 5.0, 3.0, 1.0, 1.0, 1.0, 1.5) as rank
+      FROM fatwas_fts fts
+      JOIN fatwas f ON f.id = fts.id
+      WHERE ${whereSql}
+      ORDER BY rank
+      LIMIT 120
+    `).all(...filterParams) as Array<{ id: string; rank: number }>;
+
+    // Total count for pagination
+    let total = 0;
+    if (hasFilters) {
+      const totalCountRow = db.prepare(`
+        SELECT count(*) as count
+        FROM fatwas_fts fts
+        JOIN fatwas f ON f.id = fts.id
+        WHERE ${whereSql}
+      `).get(...filterParams) as { count: number };
+      total = totalCountRow.count;
+    } else {
+      const totalCountRow = db.prepare(`
+        SELECT count(*) as count
+        FROM fatwas_fts
+        WHERE fatwas_fts MATCH ?
+      `).get(ftsMatch) as { count: number };
+      total = totalCountRow.count;
+    }
+
+    if (candidateRows.length === 0) {
+      return {
+        results: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 1,
+        tookMs: Date.now() - startTime,
+        engine: this.name,
+        facets: getFacets(),
+      };
+    }
+
+    // Fetch full documents for candidates
+    const candidateIds = candidateRows.map((r) => r.id);
+    const rankMap = new Map<string, number>(candidateRows.map((r) => [r.id, r.rank]));
+    const placeholders = candidateIds.map(() => '?').join(',');
+
+    const docs = db.prepare(`
+      SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+      FROM fatwas
+      WHERE id IN (${placeholders})
+    `).all(...candidateIds) as any[];
+
+    // Re-ranking & Precision Relevance Scoring
     const scoredDocs: Array<{ doc: FatwaQA; finalScore: number; matchedTerms: string[] }> = [];
 
-    for (const sr of searchResults) {
-      const doc = this.docMap.get(sr.id);
-      if (!doc) continue;
+    for (const d of docs) {
+      const doc: FatwaQA = {
+        ...d,
+        tags: JSON.parse(d.tags || '[]'),
+      };
+      const bm25Rank = rankMap.get(doc.id) || 0;
+      let score = 100 - bm25Rank;
 
-      let score = sr.score;
       const titleLower = (doc.title || '').toLowerCase();
       const questionLower = (doc.question || '').toLowerCase();
       const answerLower = (doc.answer || '').toLowerCase();
       const matchedForDoc = new Set<string>();
 
-      // Check for exact primary phrase in title
+      // Exact phrase match in title boost
       if (titleLower.includes(normalizedQuery.toLowerCase())) {
         score += 80.0;
       }
@@ -390,7 +355,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         }
       }
 
-      // Check phonetic code matches
+      // Phonetic matching
       const docPhonetics = extractPhoneticTokens(doc.title + ' ' + (doc.question || '').slice(0, 100));
       for (const p of expandedPhonetics) {
         if (docPhonetics.includes(p)) {
@@ -398,17 +363,16 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         }
       }
 
-      // Domain-specific disambiguation & False-Positive suppression:
-      // When searching for ablution ('ওযু'/'অজু'/'oju'/'wudu'), heavily boost docs containing
-      // genuine ablution words and penalize docs that only match substrings of unrelated words like 'অজুহাত' (excuse).
+      // Ablution disambiguation & false-positive suppression
       if (queryIsAblution) {
-        const hasAblutionInTitle = ['ওযু', 'অজু', 'উযু', 'উজু', 'ওজু', 'ওযূ', 'উযূ'].some((w) =>
+        const ablutionWords = ['ওযু', 'অজু', 'উযু', 'উজু', 'ওজু', 'ওযূ', 'উযূ'];
+        const hasAblutionInTitle = ablutionWords.some((w) =>
           new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, 'u').test(titleLower)
         );
-        const hasAblutionInQuestion = ['ওযু', 'অজু', 'উযু', 'উজু', 'ওজু', 'ওযূ', 'উযূ'].some((w) =>
+        const hasAblutionInQuestion = ablutionWords.some((w) =>
           new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, 'u').test(questionLower)
         );
-        const hasAblutionInAnswer = ['ওযু', 'অজু', 'উযু', 'উজু', 'ওজু', 'ওযূ', 'উযূ'].some((w) =>
+        const hasAblutionInAnswer = ablutionWords.some((w) =>
           new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, 'u').test(answerLower)
         );
 
@@ -419,7 +383,6 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         } else if (hasAblutionInAnswer) {
           score += 20.0;
         } else {
-          // Matched only accidental substring (e.g. 'অজুহাত' or 'জু‘ফী')
           score = score * 0.05;
         }
       }
@@ -434,15 +397,14 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     // Sort by final relevance score descending
     scoredDocs.sort((a, b) => b.finalScore - a.finalScore);
 
-    const total = scoredDocs.length;
-    const startIndex = (page - 1) * limit;
-    const paginated = scoredDocs.slice(startIndex, startIndex + limit);
+    const paginated = scoredDocs.slice(offset, offset + limit);
 
+    const topSynonyms = Array.from(expandedSynonyms).slice(0, 8);
     const allHighlightPool = Array.from(
       new Set([...Array.from(highlightTerms), ...queryTokens, ...topSynonyms])
     );
 
-    results = paginated.map(({ doc, finalScore, matchedTerms }) => {
+    const results: SearchResultItem[] = paginated.map(({ doc, finalScore, matchedTerms }) => {
       const termsForDoc = Array.from(new Set([...matchedTerms, ...allHighlightPool]));
       const snippet = generateHighlightedSnippet(doc.answer || doc.question, termsForDoc, 240);
       const titleSnippet = generateHighlightedSnippet(doc.title, termsForDoc, 120);
@@ -456,8 +418,6 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       };
     });
 
-    const facets = getFacets();
-
     return {
       results,
       total,
@@ -466,7 +426,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       totalPages: Math.ceil(total / limit) || 1,
       tookMs: Date.now() - startTime,
       engine: this.name,
-      facets,
+      facets: getFacets(),
     };
   }
 }
