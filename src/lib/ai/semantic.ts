@@ -98,6 +98,7 @@ Examples:
 - 'hath badha buker upor na nabir niche' -> {"canonicalBengali": "সালাতে হাত বাঁধার স্থান (বুকের উপর নাকি নাভির নিচে)", "coreSubject": "সালাত", "coreAspect": "হাত বাঁধা", "essentialKeywords": ["হাত বাঁধা", "বুকের উপর", "নাভির নিচে"], "fiqhConcepts": ["বুকে হাত বাঁধা", "নাভীর নীচে হাত বাঁধা", "সালাতে হাত বাঁধা", "তাকবীরে তাহরীমা"]}
 - 'dhum pan kora haram kina' -> {"canonicalBengali": "ধূমপান ও বিড়ি-সিগারেট খাওয়ার শারয়ী বিধান", "coreSubject": "হালাল-হারাম", "coreAspect": "ধূমপান", "essentialKeywords": ["ধূমপান", "বিড়ি", "সিগারেট"], "fiqhConcepts": ["ধূমপানের হুকুম", "তামাক", "মাদক", "হারাম"]}
 - 'oju chara quran dhora jabe ki' -> {"canonicalBengali": "ওযু ছাড়া কুরআন মাজীদ স্পর্শ বা পাঠ করার বিধান", "coreSubject": "ওযু", "coreAspect": "কুরআন স্পর্শ", "essentialKeywords": ["ওযু", "কুরআন", "স্পর্শ"], "fiqhConcepts": ["মুসহাফ স্পর্শ", "বিনা ওযূতে কুরআন", "অপবিত্র অবস্থায় কুরআন", "পবিত্রতা"]}
+- 'soitan er dhoka' -> {"canonicalBengali": "শয়তানের ধোঁকা ও ওয়াসওয়াসা থেকে বাঁচার উপায়", "coreSubject": "শয়তান", "coreAspect": "ধোঁকা", "essentialKeywords": ["শয়তান", "ধোঁকা", "ওয়াসওয়াসা"], "fiqhConcepts": ["শয়তানের কুমন্ত্রণা", "ওয়াসওয়াসা", "ইবলিস", "কুচিন্তা", "শয়তানের ধোঁকা"]}
 - 'tahajjud koy rakat' -> {"canonicalBengali": "তাহাজ্জুদ সালাতের রাকাত সংখ্যা", "coreSubject": "তাহাজ্জুদ", "coreAspect": "রাকাত সংখ্যা", "essentialKeywords": ["তাহাজ্জুদ", "রাকাত"], "fiqhConcepts": ["কিয়ামুল লাইল", "নফল সালাত", "আট রাকাত", "বিতর"]}`,
           },
           {

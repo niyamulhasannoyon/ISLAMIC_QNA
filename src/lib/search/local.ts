@@ -244,12 +244,17 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     const highlightTerms = new Set<string>();
 
     transliterated.expandedTerms.forEach((t) => {
-      highlightTerms.add(t);
-      const synonyms = getSynonymsAndVariants(t);
-      synonyms.forEach((s) => expandedSynonyms.add(s));
+      if (!isStopWord(t) && t.length >= 2) {
+        highlightTerms.add(t);
+        const synonyms = getSynonymsAndVariants(t);
+        synonyms.forEach((s) => {
+          if (!isStopWord(s)) expandedSynonyms.add(s);
+        });
+      }
     });
 
     for (const token of queryTokens) {
+      if (isStopWord(token)) continue;
       highlightTerms.add(token);
       const stemmed = stemBengaliToken(token);
       expandedStems.add(stemmed);
@@ -259,8 +264,10 @@ export class LocalBengaliSearchEngine implements SearchEngine {
 
       const synonyms = getSynonymsAndVariants(token);
       synonyms.forEach((s) => {
-        expandedSynonyms.add(s);
-        highlightTerms.add(s);
+        if (!isStopWord(s)) {
+          expandedSynonyms.add(s);
+          highlightTerms.add(s);
+        }
       });
 
       const phonetic = encodeBengaliPhonetic(token);
@@ -412,18 +419,27 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       `).all(...filterParams) as Array<{ id: string; rank: number }>;
     }
 
-    // Tier 2: If conjunction yielded 0 candidates, try phrase and keyword expansion
+    // Tier 2: If conjunction yielded 0 candidates, try phrase and keyword expansion (strictly filtering out stop words)
     if (candidateRows.length === 0) {
-      const fallbackPool = [
-        ...phraseClauses,
-        ...(subjectPool.length > 0 && aspectPool.length > 0
-          ? [...subjectPool.slice(0, 4), ...aspectPool.slice(0, 4)].map((t) => `"${cleanFtsTerm(t)}"*`)
-          : queryTokens.map((t) => `"${cleanFtsTerm(t)}"*`)),
-      ];
+      const nonStopQueryTokens = queryTokens.filter((t) => !isStopWord(t) && t.length >= 2);
+      const fallbackTokens = (subjectPool.length > 0 && aspectPool.length > 0
+        ? [...subjectPool.slice(0, 4), ...aspectPool.slice(0, 4)]
+        : nonStopQueryTokens.length > 0 ? nonStopQueryTokens : queryTokens
+      )
+        .map(cleanFtsTerm)
+        .filter((t) => !isStopWord(t) && t.length >= 2)
+        .map((t) => `"${t}"*`);
+
+      const fallbackPool = [...phraseClauses, ...fallbackTokens];
       ftsMatch = Array.from(new Set(fallbackPool.filter(Boolean))).join(' OR ');
       if (!ftsMatch) {
-        const single = cleanFtsTerm(queryTokens[0] || primaryQuery);
-        ftsMatch = getSynonymsAndVariants(single).slice(0, 8).map((s) => `"${cleanFtsTerm(s)}"*`).join(' OR ');
+        const single = cleanFtsTerm(nonStopQueryTokens[0] || queryTokens[0] || primaryQuery);
+        ftsMatch = getSynonymsAndVariants(single)
+          .map(cleanFtsTerm)
+          .filter((s) => !isStopWord(s) && s.length >= 2)
+          .slice(0, 8)
+          .map((s) => `"${s}"*`)
+          .join(' OR ');
       }
 
       filterParams[0] = ftsMatch;
