@@ -4,41 +4,12 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
-import { Lock, User, KeyRound, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Lock, ShieldCheck, AlertCircle, ShieldAlert } from 'lucide-react';
 
 export default function AdminLoginPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const res = await fetch('/api/v1/admin/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', username, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'ইউজারনেম অথবা পাসওয়ার্ড ভুল হয়েছে');
-      }
-
-      router.push('/admin');
-      router.refresh();
-    } catch (err: any) {
-      setError(err?.message || 'লগইন ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleGoogleAdminLogin = async () => {
     setGoogleLoading(true);
@@ -99,34 +70,51 @@ export default function AdminLoginPage() {
       <Header />
 
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <div className="max-w-md w-full bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-lg">
+        <div className="max-w-md w-full bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-xl">
+          {/* Header */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 mb-3">
-              <Lock className="h-6 w-6" />
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 mb-3.5 shadow-inner">
+              <Lock className="h-7 w-7" />
             </div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
               এডমিন সিস্টেম লগইন
             </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              ইসলামিক ফতোয়া গবেষণা সিস্টেম পরিচালনা ও ইনজেশন পোর্টাল
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
+              ইসলামিক ফতোয়া ও গবেষণা প্ল্যাটফর্ম কন্ট্রোল প্যানেল
             </p>
           </div>
 
+          {/* Error Alert */}
           {error && (
-            <div className="mb-6 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2">
+            <div className="mb-6 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2.5">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
-              <span>{error}</span>
+              <span className="leading-relaxed">{error}</span>
             </div>
           )}
 
-          {/* Google Sign In for Admin */}
+          {/* Authorization Policy Banner */}
+          <div className="mb-6 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 text-xs space-y-1">
+            <div className="flex items-center gap-1.5 font-bold">
+              <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>নিরাপত্তা নীতি ও অনুমতি:</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400 pl-5">
+              কেবলমাত্র নির্দিষ্ট অনুমোদনপ্রাপ্ত গুগল ইমেইল দিয়ে এডমিন প্যানেলে প্রবেশ করা সম্ভব:
+            </p>
+            <div className="pl-5 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-200">
+              • niyamulhasanbd@gmail.com<br />
+              • niyamulhasan1089@gmail.com
+            </div>
+          </div>
+
+          {/* Google Sign In Button */}
           <button
             type="button"
             onClick={handleGoogleAdminLogin}
-            disabled={googleLoading || loading}
-            className="w-full mb-4 py-2.5 px-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2.5 disabled:opacity-50"
+            disabled={googleLoading}
+            className="w-full py-3 px-4 bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-sm font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-3 disabled:opacity-50"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -147,72 +135,13 @@ export default function AdminLoginPage() {
             <span>{googleLoading ? 'গুগলে এডমিন লগইন হচ্ছে...' : 'Google দিয়ে এডমিন লগইন করুন'}</span>
           </button>
 
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-zinc-200 dark:border-zinc-800" />
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase font-mono tracking-wider">
-              <span className="bg-white dark:bg-[#121215] px-2 text-zinc-400">অথবা এডমিন ক্রেডেনশিয়াল</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                ইউজারনেম (Username)
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                <input
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                পাসওয়ার্ড (Password)
-              </label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || googleLoading}
-              className="w-full mt-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? (
-                <span>লগইন হচ্ছে...</span>
-              ) : (
-                <>
-                  <span>লগইন করুন</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
-
+          {/* Footer Navigation Link */}
           <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800/80 text-center">
             <Link
               href="/"
-              className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors inline-flex items-center gap-1"
+              className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors inline-flex items-center gap-1.5 font-medium"
             >
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
               <span>পাবলিক ফতোয়া সার্চ ইঞ্জিনে ফিরে যান</span>
             </Link>
           </div>

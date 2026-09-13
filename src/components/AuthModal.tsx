@@ -122,8 +122,8 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
           isAdminLogin: isAdminMode,
           mockUser: !googleCredential
             ? {
-                email: isAdminMode ? "admin@islamicqna.org" : "user@gmail.com",
-                name: isAdminMode ? "এডমিন ইউজার (Google)" : "গুগল ইউজার",
+                email: isAdminMode ? "niyamulhasanbd@gmail.com" : "user@gmail.com",
+                name: isAdminMode ? "নিয়ামুল হাসান (Admin)" : "গুগল ইউজার",
                 picture: "https://lh3.googleusercontent.com/a/default-user=s96-c",
               }
             : undefined,
