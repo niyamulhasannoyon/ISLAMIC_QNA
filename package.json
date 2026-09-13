@@ -1,0 +1,38 @@
+{
+  "name": "fatwa-search-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "tsx src/scripts/seed.ts && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "seed": "tsx src/scripts/seed.ts",
+    "test": "tsx src/scripts/test-search.ts && tsx src/scripts/test-api.ts",
+    "test:search": "tsx src/scripts/test-search.ts",
+    "test:api": "tsx src/scripts/test-api.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.453.0",
+    "minisearch": "^7.1.0",
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.13",
+    "typescript": "^5.6.3"
+  }
+}

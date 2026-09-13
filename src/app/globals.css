@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98.8%; /* #fcfcfc */
+    --foreground: 240 10% 3.9%;  /* #09090b */
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --primary: 158 93% 31%;     /* #059669 warm emerald */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 158 93% 31%;
+    --accent-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 158 93% 31%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%; /* #09090b */
+    --foreground: 0 0% 98%;     /* #fafafa */
+    --card: 240 7% 7%;          /* #121215 */
+    --card-foreground: 0 0% 98%;
+    --primary: 158 93% 31%;     /* #059669 warm emerald */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 158 93% 31%;
+    --accent-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;   /* border-zinc-800 */
+    --input: 240 3.7% 15.9%;
+    --ring: 158 93% 31%;
+  }
+}
+
+body {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Editorial Bengali Typography Ergonomics */
+.font-bengali {
+  font-family: 'Hind Siliguri', 'Noto Serif Bengali', -apple-system, sans-serif;
+  line-height: 1.82;
+  word-spacing: 0.05em;
+}
+
+.font-bengali-serif {
+  font-family: 'Noto Serif Bengali', serif;
+  line-height: 1.82;
+  word-spacing: 0.05em;
+}
+
+.font-arabic {
+  font-family: 'Amiri', 'Traditional Arabic', serif;
+  line-height: 2.1;
+  direction: rtl;
+}
+
+/* Custom editorial scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.45);
+}
+
+/* Subtle Editorial Search Match Highlighting */
+mark {
+  background-color: rgba(5, 150, 105, 0.12);
+  color: #047857;
+  border-radius: 0.2rem;
+  padding: 0.08rem 0.25rem;
+  font-weight: 600;
+}
+
+.dark mark {
+  background-color: rgba(5, 150, 105, 0.22);
+  color: #6ee7b7;
+  border: 1px solid rgba(5, 150, 105, 0.35);
+}
+
+/* Tailwind typography custom enhancements for Islamic quotes */
+.prose blockquote {
+  border-left-color: #059669 !important;
+  background: rgba(5, 150, 105, 0.03);
+  padding: 0.85rem 1.25rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: normal;
+}
+
+.dark .prose blockquote {
+  background: rgba(5, 150, 105, 0.07);
+}
+
