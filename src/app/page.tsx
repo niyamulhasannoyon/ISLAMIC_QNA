@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { Header } from "@/components/Header";
 import { SearchHero } from "@/components/SearchHero";
 import { FilterBar } from "@/components/FilterBar";
@@ -358,12 +359,14 @@ export default function Home() {
               {t.footer.archiveNotice}
             </span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 font-mono text-[10px] sm:text-[11px]">
-            <span>GET /api/v1/search</span>
+          <div className="flex items-center gap-3 font-bengali text-xs">
+            <Link href="/privacy" className="hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+              গোপনীয়তা নীতি
+            </Link>
             <span>&bull;</span>
-            <span className={lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali" : "font-sans"}>
-              {t.footer.apiInfo}
-            </span>
+            <Link href="/terms" className="hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+              ব্যবহারের শর্তাবলী
+            </Link>
           </div>
         </div>
       </footer>

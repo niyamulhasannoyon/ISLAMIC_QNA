@@ -461,12 +461,15 @@ export default async function FatwaPage({ params }: Props) {
               ইসলামিক ফতোয়া ও গবেষণা ডিজিটাল আর্কাইভ &bull; সর্বস্বত্ব সংরক্ষিত
             </span>
           </div>
-          <Link
-            href="/"
-            className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-bengali"
-          >
-            হোমপেজে ফিরে যান
-          </Link>
+          <div className="flex items-center gap-3 font-bengali">
+            <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+              গোপনীয়তা নীতি
+            </Link>
+            <span>&bull;</span>
+            <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+              ব্যবহারের শর্তাবলী
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
