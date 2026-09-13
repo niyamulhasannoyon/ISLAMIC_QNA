@@ -137,8 +137,10 @@ export async function POST(req: NextRequest) {
     // 5. Perform idempotent batch upsert into SQLite
     const batchResult = batchUpsertFatwas(validatedItems);
 
-    // 6. Instantly refresh search index with newly upserted items
-    await refreshSearchIndex();
+    // 6. Instantly refresh search index if new records were inserted or updated
+    if (batchResult.inserted > 0 || batchResult.updated > 0) {
+      await refreshSearchIndex();
+    }
 
     return NextResponse.json({
       success: true,

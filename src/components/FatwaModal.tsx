@@ -76,34 +76,44 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
       >
         {/* Editorial Top Bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-[#121215]/90 backdrop-blur">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Scholar Attribution */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 1. উৎস (Source) */}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border",
+                isAtTahreek
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60 font-bengali"
+                  : isAlItisam
+                  ? "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700 font-bengali"
+                  : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 font-bengali"
+              )}
+            >
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">উৎস:</span>
+              <span className="font-semibold">
+                {item.source === "at-tahreek" ? "আত-তাহরীক" : item.source === "al-itisam" ? "আল-ইতিসাম" : item.source}
+              </span>
+            </span>
+
+            {/* 2. বিভাগ (Category) */}
+            {item.category && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-800 font-bengali">
+                <span className="text-[10px] font-mono text-zinc-400 uppercase">বিভাগ:</span>
+                <span>{item.category}</span>
+              </span>
+            )}
+
+            {/* 3. লেখক / আলেম (Scholar / Author) */}
             {item.scholar && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-xs font-medium font-bengali">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-[11px] font-medium font-bengali">
                 <GraduationCap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>{item.scholar}</span>
+                <span className="text-[10px] font-mono text-zinc-400 uppercase">লেখক:</span>
+                <span className="font-medium">{item.scholar}</span>
               </div>
             )}
 
-            <span
-              className={cn(
-                "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold tracking-wide uppercase border",
-                isAtTahreek
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60"
-                  : isAlItisam
-                  ? "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700"
-                  : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
-              )}
-            >
-              {item.source}
-            </span>
-
-            <span className="text-xs text-zinc-500 font-medium font-bengali">
-              &bull; {item.category}
-            </span>
-
+            {/* 4. তারিখ (Date) */}
             {displayDate && (
-              <span className="text-xs text-zinc-400 font-mono hidden sm:inline">
+              <span className="text-xs text-zinc-400 font-mono hidden sm:inline ml-1">
                 &bull; {formatDate(displayDate)}
               </span>
             )}

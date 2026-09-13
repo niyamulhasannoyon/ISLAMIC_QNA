@@ -2,6 +2,9 @@ import { FatwaQA, SearchQueryOptions, SearchResponse, SearchResultItem } from '@
 import { SearchEngine } from './types';
 import { getFacets } from '../db';
 import { generateHighlightedSnippet } from './local';
+import { transliterateQuery } from './transliterate';
+import { getSynonymsAndVariants } from './synonyms';
+import { normalizeBengaliText } from './normalizer';
 
 export class MeilisearchEngine implements SearchEngine {
   public name = 'Meilisearch (Bengali Optimized)';
@@ -53,9 +56,16 @@ export class MeilisearchEngine implements SearchEngine {
 
   public async search(options: SearchQueryOptions): Promise<SearchResponse> {
     const startTime = Date.now();
-    const query = options.q || '';
+    const rawQuery = (options.q || '').trim();
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
+
+    // Expand query with Banglish transliterations and synonyms
+    const transliterated = transliterateQuery(rawQuery);
+    const primaryQuery = transliterated.primaryBengali || rawQuery;
+    const normalized = normalizeBengaliText(primaryQuery);
+    const synonyms = normalized.split(/\s+/).flatMap((t) => getSynonymsAndVariants(t));
+    const finalSearchQuery = Array.from(new Set([normalized, ...transliterated.expandedTerms, ...synonyms.slice(0, 5)])).join(' ');
 
     const filters: string[] = [];
     if (options.source && options.source !== 'All') {
@@ -76,7 +86,7 @@ export class MeilisearchEngine implements SearchEngine {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
-          q: query,
+          q: finalSearchQuery,
           filter: filters.length > 0 ? filters.join(' AND ') : undefined,
           offset: (page - 1) * limit,
           limit,
@@ -91,6 +101,8 @@ export class MeilisearchEngine implements SearchEngine {
       }
 
       const data = await response.json();
+      const matchedTerms = Array.from(new Set([rawQuery, normalized, ...transliterated.expandedTerms, ...synonyms]));
+
       const results: SearchResultItem[] = (data.hits || []).map((hit: any) => {
         const snippet = hit._formatted?.answer || hit._formatted?.question || hit.answer;
         const titleSnippet = hit._formatted?.title || hit.title;
@@ -99,7 +111,7 @@ export class MeilisearchEngine implements SearchEngine {
           score: hit._rankingScore || 1.0,
           snippet,
           titleSnippet,
-          matchedTerms: query.split(/\s+/).filter(Boolean),
+          matchedTerms,
         };
       });
 

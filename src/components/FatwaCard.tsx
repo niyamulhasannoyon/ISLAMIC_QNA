@@ -41,39 +41,46 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
 
   return (
     <article className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/90 rounded-xl p-5 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-150 shadow-[0_1px_3px_rgba(0,0,0,0.04)] group">
-      {/* Editorial Meta Bar: Scholar, Source, Category, Date, Actions */}
-      <div className="flex items-center justify-between gap-3 mb-3">
+      {/* Professional Editorial Meta Row: উৎস, বিভাগ, লেখক, তারিখ & Actions */}
+      <div className="flex items-center justify-between gap-3 mb-3 pb-2.5 border-b border-zinc-100 dark:border-zinc-800/60">
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          {/* Scholar Attribution Badge */}
+          {/* 1. উৎস (Source) Badge */}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border",
+              isAtTahreek
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60 font-bengali"
+                : isAlItisam
+                ? "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700 font-bengali"
+                : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 font-bengali"
+            )}
+          >
+            <span className="text-[10px] font-mono text-zinc-400 uppercase">উৎস:</span>
+            <span className="font-semibold">
+              {item.source === "at-tahreek" ? "আত-তাহরীক" : item.source === "al-itisam" ? "আল-ইতিসাম" : item.source}
+            </span>
+          </span>
+
+          {/* 2. বিভাগ (Category) Badge */}
+          {item.category && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-zinc-50 dark:bg-zinc-900/80 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-800 font-bengali">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">বিভাগ:</span>
+              <span>{item.category}</span>
+            </span>
+          )}
+
+          {/* 3. লেখক / আলেম (Scholar / Author) Badge */}
           {item.scholar && (
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/90 text-zinc-800 dark:text-zinc-200 font-medium font-bengali">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80 text-zinc-800 dark:text-zinc-200 text-[11px] font-medium font-bengali">
               <GraduationCap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>{item.scholar}</span>
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">লেখক:</span>
+              <span className="font-medium">{item.scholar}</span>
             </div>
           )}
 
-          {/* Source Badge */}
-          <span
-            className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono uppercase tracking-wider font-semibold border",
-              isAtTahreek
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60"
-                : isAlItisam
-                ? "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700"
-                : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
-            )}
-          >
-            {item.source === "at-tahreek" ? "At-Tahreek" : item.source === "al-itisam" ? "Al-I'tisam" : item.source}
-          </span>
-
-          {/* Category Pill */}
-          <span className="text-zinc-500 dark:text-zinc-400 font-bengali font-normal">
-            &bull; {item.category}
-          </span>
-
-          {/* Publication Date */}
+          {/* 4. তারিখ (Date) */}
           {displayDate && (
-            <span className="text-zinc-400 dark:text-zinc-500 font-mono text-[11px] hidden sm:inline">
+            <span className="text-zinc-400 dark:text-zinc-500 font-mono text-[11px] hidden md:inline ml-1">
               &bull; {formatDate(displayDate)}
             </span>
           )}

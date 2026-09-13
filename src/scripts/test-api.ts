@@ -91,15 +91,13 @@ async function testApi() {
     }),
   });
 
-  const dupRes = await duplicateReq.json ? await ingestHandler(duplicateReq) : null;
-  if (dupRes) {
-    const dupBody = await dupRes.json();
-    console.log(`Duplicate Ingest response:`, dupBody);
-    if (dupBody.skipped !== 1) {
-      throw new Error(`Expected skipped = 1, got ${dupBody.skipped}`);
-    }
-    console.log('Idempotency verified: Duplicate item was skipped!');
+  const dupRes = await ingestHandler(duplicateReq);
+  const dupBody = await dupRes.json();
+  console.log(`Duplicate Ingest response:`, dupBody);
+  if (dupBody.skipped !== 1) {
+    throw new Error(`Expected skipped = 1, got ${dupBody.skipped}`);
   }
+  console.log('Idempotency verified: Duplicate item was skipped!');
 
   console.log('\n--- 4. Testing Search on newly ingested item ---');
   const searchRes = await searchFatwas({ q: 'তাহাজ্জুদ' });

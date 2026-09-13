@@ -1,6 +1,8 @@
-import { FatwaQA, SearchQueryOptions, SearchResponse, SearchResultItem } from '@/types/fatwa';
+import { FatwaQA, SearchQueryOptions, SearchResponse } from '@/types/fatwa';
 import { SearchEngine } from './types';
-import { getFacets } from '../db';
+import { transliterateQuery } from './transliterate';
+import { getSynonymsAndVariants } from './synonyms';
+import { normalizeBengaliText } from './normalizer';
 
 export class MongoAtlasSearchEngine implements SearchEngine {
   public name = 'MongoDB Atlas Search (Bengali Analyzer)';
@@ -22,22 +24,28 @@ export class MongoAtlasSearchEngine implements SearchEngine {
    * Generates MongoDB Atlas Search aggregation pipeline for Bengali full-text search
    */
   public buildAtlasSearchPipeline(options: SearchQueryOptions): any[] {
-    const query = (options.q || '').trim();
+    const rawQuery = (options.q || '').trim();
+    const transliterated = transliterateQuery(rawQuery);
+    const primaryQuery = transliterated.primaryBengali || rawQuery;
+    const normalized = normalizeBengaliText(primaryQuery);
+    const synonyms = normalized.split(/\s+/).flatMap((t) => getSynonymsAndVariants(t));
+    const finalSearchQuery = Array.from(new Set([normalized, ...transliterated.expandedTerms, ...synonyms.slice(0, 5)])).join(' ');
+
     const shouldClauses: any[] = [];
     const filterClauses: any[] = [];
 
-    if (query) {
+    if (finalSearchQuery) {
       shouldClauses.push({
         text: {
-          query,
+          query: finalSearchQuery,
           path: 'title',
-          score: { boost: { value: 3.5 } },
+          score: { boost: { value: 4.5 } },
           fuzzy: { maxEdits: 1 },
         },
       });
       shouldClauses.push({
         text: {
-          query,
+          query: finalSearchQuery,
           path: 'question',
           score: { boost: { value: 2.5 } },
           fuzzy: { maxEdits: 1 },
@@ -45,14 +53,14 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       });
       shouldClauses.push({
         text: {
-          query,
+          query: finalSearchQuery,
           path: 'answer',
           score: { boost: { value: 1.0 } },
         },
       });
       shouldClauses.push({
         autocomplete: {
-          query,
+          query: finalSearchQuery,
           path: 'title',
           score: { boost: { value: 2.0 } },
         },
