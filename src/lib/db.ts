@@ -165,8 +165,92 @@ export function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_fatwas_published_date ON fatwas(published_date DESC);
   `);
 
+  // Auto-seed database from JSON datasets if running with 0 records (e.g. fresh Vercel /tmp instance)
+  autoSeedIfEmpty(db);
+
   global.__fatwaDb = db;
   return db;
+}
+
+function autoSeedIfEmpty(db: Database.Database): void {
+  try {
+    const row = db.prepare('SELECT count(*) as count FROM fatwas').get() as { count: number } | undefined;
+    if (row && row.count > 0) {
+      return;
+    }
+
+    const dataDir = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) {
+      return;
+    }
+
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO fatwas (
+        id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const jsonFiles = ['al_itisam.json', 'at_tahreek.json', 'al_kawsar.json'];
+
+    db.transaction(() => {
+      for (const fileName of jsonFiles) {
+        const filePath = path.join(dataDir, fileName);
+        if (fs.existsSync(filePath)) {
+          try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const items = JSON.parse(raw);
+            const itemsArr = Array.isArray(items) ? items : [items];
+
+            for (const item of itemsArr) {
+              if (!item) continue;
+              const question = (item.question || item.title || '').trim();
+              const answer = (item.answer || item.body || '').trim();
+              if (!question && !answer) continue;
+
+              const title = (item.title || question.slice(0, 120)).trim();
+              const source = canonicalizeSource(item.source || fileName);
+              const source_url = (item.source_url || '').trim();
+              const category = (item.category || 'General').trim();
+              const tags = JSON.stringify(item.tags || [category.split(' ')[0]]);
+              const scholar = (
+                item.scholar ||
+                (source === 'at-tahreek'
+                  ? 'ড. মুহাম্মাদ আসাদুল্লাহ আল-গালিব'
+                  : source === 'al-kawsar'
+                  ? 'মারকাযুদ দাওয়াহ / আলকাউসার'
+                  : 'ফতোয়া বোর্ড')
+              ).trim();
+              const published_date = item.published_date || item.createdAt || new Date().toISOString().split('T')[0];
+              const scraped_at = item.scraped_at || new Date().toISOString();
+              const sha256_hash = (item.sha256_hash || computeFatwaHash({ question, answer })).toLowerCase();
+              const id = item.id || crypto.randomUUID();
+
+              insertStmt.run(
+                id,
+                source,
+                source_url,
+                title,
+                question,
+                answer,
+                category,
+                tags,
+                scholar,
+                published_date,
+                sha256_hash,
+                scraped_at,
+                published_date,
+                new Date().toISOString()
+              );
+            }
+          } catch (fileErr) {
+            console.warn(`[Auto-Seed Warning] Error processing ${fileName}:`, fileErr);
+          }
+        }
+      }
+    })();
+  } catch (err) {
+    console.warn('[Auto-Seed Error]:', err);
+  }
 }
 
 export type UpsertResult = IngestResultItem;
