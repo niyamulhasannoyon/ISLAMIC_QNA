@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 
 # Ensure local imports work reliably
 sys.path.insert(0, os.path.dirname(__file__))
-from normalizer import normalize_text, compute_fatwa_hash
+from normalizer import normalize_text, compute_fatwa_hash, hash_to_uuid
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AlKawsarFullCrawler")
@@ -193,13 +193,13 @@ def save_to_database_and_json(items: List[Dict[str, Any]]):
         if not h or h in seen_hashes:
             continue
         seen_hashes.add(h)
+        item["id"] = hash_to_uuid(h)
         unique_items.append(item)
 
         cursor.execute("SELECT id FROM fatwas WHERE sha256_hash = ?", (h,))
         row = cursor.fetchone()
         if not row:
-            import uuid
-            uid = str(uuid.uuid4())
+            uid = item["id"]
             cursor.execute("""
                 INSERT INTO fatwas (
                     id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at

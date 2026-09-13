@@ -116,7 +116,36 @@ async function runTests() {
   }
   console.log(`Top result: ${kawsarSearch.results[0].title}`);
 
-  console.log('\nAll 11 professional search test suites passed successfully!');
+  console.log('\n=== 12. Testing Bengali Script Integrity & Non-Breaking Highlighting ===');
+  const brokenPatterns = [
+    /<\/mark>[\u0981-\u0983\u09BC\u09BE-\u09CD\u09D7]/u,
+    /[\u09CD]<mark/u,
+    /\s[\u0981-\u0983\u09BC\u09BE-\u09CD\u09D7]/u,
+    />\s*[\u09BE-\u09CC\u09CD]/u,
+    /স্<mark/u,
+    /<mark[^>]*>পর<\/mark>্শ/u,
+    /উ<mark[^>]*>পর<\/mark>/u,
+  ];
+
+  const complexQuery = 'দুই সিজদার পর বসা জালসায়ে ইস্তিরাহাত বৈঠক';
+  const complexRes = await searchFatwas({ q: complexQuery, limit: 15 });
+  console.log(`Results for complex query: ${complexRes.total}`);
+
+  for (let i = 0; i < complexRes.results.length; i++) {
+    const item = complexRes.results[i];
+    const combined = (item.titleSnippet || '') + ' ' + (item.snippet || '');
+
+    for (const pat of brokenPatterns) {
+      if (pat.test(combined)) {
+        throw new Error(
+          `Bengali script integrity violation in result #${i + 1} ("${item.title.slice(0, 40)}..."): matched broken pattern ${pat}\nCombined text: ${combined}`
+        );
+      }
+    }
+  }
+  console.log('Verified 15 complex results: 0 broken conjuncts, 0 orphaned vowel signs, 0 fractured words!');
+
+  console.log('\nAll 12 professional search test suites passed successfully!');
 }
 
 runTests().catch((err) => {

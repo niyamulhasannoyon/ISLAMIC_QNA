@@ -1,11 +1,9 @@
 import { MetadataRoute } from "next";
 import { getFatwaCount, getFatwaMetadataList } from "@/lib/db";
+import { getSiteUrl } from "@/lib/utils";
 
 const CHUNK_SIZE = 10000;
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "https://fatwa-archive.vercel.app";
+const siteUrl = getSiteUrl();
 
 export async function generateSitemaps() {
   const total = getFatwaCount();

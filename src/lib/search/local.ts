@@ -5,6 +5,7 @@ import { normalizeBengaliText, stemBengaliToken, isStopWord } from './normalizer
 import { encodeBengaliPhonetic, extractPhoneticTokens } from './phonetic';
 import { transliterateQuery } from './transliterate';
 import { getSynonymsAndVariants, isAblutionTerm } from './synonyms';
+import { extractSemanticFiqhIntent } from '../ai/semantic';
 import { SearchEngine } from './types';
 
 function escapeHtml(unsafe: string): string {
@@ -16,8 +17,15 @@ function escapeHtml(unsafe: string): string {
     .replace(/'/g, '&#039;');
 }
 
+// Bengali inflection suffixes regex covering case markers, articles, plurals, clitics, and vowel signs
+const BENGALI_SUFFIX_PATTERN =
+  '(?:গুলোর(?:ও|ই)?|গুলির(?:ও|ই)?|সমূহের?|গুলো(?:তে|য়|কে|র|ও|ই)?|গুলি(?:তে|কে|র|ও|ই)?|দের(?:কে|ও|ই)?|গণের?|খানা(?:র|য়)?|খানি(?:র)?|ভাবে|ধারী|কারী|সম্মত|টিতে|টাতে|টিকে|টাকে|টির|টার|টি(?:ও|ই)?|টা(?:ও|ই)?|য়ের(?:ও|ই)?|এর(?:ও|ই)?|\u09C7\u09B0(?:ও|ই)?|েতে|তে(?:ও|ই)?|য়ে|কে(?:ও|ই)?|র(?:ও|ই)?|ে(?:ও|ই)?|ায়(?:ও|ই)?|য়(?:ও|ই)?|ও|ই)?';
+
 /**
- * Extracts a contextual window around matched search terms and highlights them via regex.
+ * Extracts a contextual window around matched search terms and highlights them safely.
+ * Preserves Bengali script integrity: never cuts inside conjuncts (যুক্তাক্ষর),
+ * never orphans dependent vowel signs (কার: ে, া, ি, ইত্যাদি), and never matches inside
+ * preceding letters (e.g. 'পর' inside 'উপর' or 'স্পর্শ').
  */
 export function generateHighlightedSnippet(
   text: string,
@@ -28,8 +36,11 @@ export function generateHighlightedSnippet(
 
   const cleanText = text.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
   if (!matchedTerms || matchedTerms.length === 0) {
-    const truncated = cleanText.slice(0, maxLength);
-    return escapeHtml(truncated) + (cleanText.length > maxLength ? '...' : '');
+    if (cleanText.length <= maxLength) return escapeHtml(cleanText);
+    let end = maxLength;
+    const spaceIdx = cleanText.lastIndexOf(' ', end);
+    if (spaceIdx > Math.floor(maxLength * 0.6)) end = spaceIdx;
+    return escapeHtml(cleanText.slice(0, end)) + '...';
   }
 
   // Filter and sort terms by length descending for greedy matching
@@ -42,20 +53,32 @@ export function generateHighlightedSnippet(
   ).sort((a, b) => b.length - a.length);
 
   if (validTerms.length === 0) {
-    const truncated = cleanText.slice(0, maxLength);
-    return escapeHtml(truncated) + (cleanText.length > maxLength ? '...' : '');
+    if (cleanText.length <= maxLength) return escapeHtml(cleanText);
+    let end = maxLength;
+    const spaceIdx = cleanText.lastIndexOf(' ', end);
+    if (spaceIdx > Math.floor(maxLength * 0.6)) end = spaceIdx;
+    return escapeHtml(cleanText.slice(0, end)) + '...';
   }
 
-  // Find first occurrence of any matched term
-  let earliestIdx = -1;
-  let bestTerm = '';
+  // Build Unicode word-boundary-aware pattern:
+  // 1. (?<![\p{L}\p{M}\p{N}\u200C\u200D]) asserts word boundary before the term (never mid-word, mid-conjunct, or after virama)
+  // 2. (?:terms) matches one of the valid terms
+  // 3. BENGALI_SUFFIX_PATTERN matches valid trailing Bengali inflections (e.g. -ে, -ের, -টি, -গুলো)
+  // 4. (?![\p{L}\p{M}\p{N}\u200C\u200D]) asserts word boundary after the match
+  const termsRegex = validTerms.map(escapeRegExp).join('|');
+  const highlightRegex = new RegExp(
+    `(?<![\\p{L}\\p{M}\\p{N}\\u200C\\u200D])(?:${termsRegex})${BENGALI_SUFFIX_PATTERN}(?![\\p{L}\\p{M}\\p{N}\\u200C\\u200D])`,
+    'gu'
+  );
 
-  for (const term of validTerms) {
-    const idx = cleanText.toLowerCase().indexOf(term.toLowerCase());
-    if (idx !== -1 && (earliestIdx === -1 || idx < earliestIdx)) {
-      earliestIdx = idx;
-      bestTerm = term;
-    }
+  // Find first legitimate match index to center the snippet window
+  let earliestIdx = -1;
+  let bestMatchLen = 0;
+  highlightRegex.lastIndex = 0;
+  const firstMatch = highlightRegex.exec(cleanText);
+  if (firstMatch) {
+    earliestIdx = firstMatch.index;
+    bestMatchLen = firstMatch[0].length;
   }
 
   let start = 0;
@@ -70,34 +93,55 @@ export function generateHighlightedSnippet(
       const prevSpace = cleanText.indexOf(' ', start);
       if (prevSpace !== -1 && prevSpace < earliestIdx) {
         start = prevSpace + 1;
+      } else {
+        // Prevent starting mid-combining mark
+        while (start < earliestIdx && /[\p{M}\u200C\u200D]/u.test(cleanText[start])) {
+          start++;
+        }
       }
     }
 
     if (end < cleanText.length) {
       const nextSpace = cleanText.lastIndexOf(' ', end);
-      if (nextSpace !== -1 && nextSpace > earliestIdx + bestTerm.length) {
+      if (nextSpace !== -1 && nextSpace > earliestIdx + bestMatchLen) {
         end = nextSpace;
+      } else {
+        // Prevent cutting mid-combining mark
+        while (end < cleanText.length && /[\p{M}\u200C\u200D]/u.test(cleanText[end])) {
+          end++;
+        }
       }
     }
   } else {
     end = Math.min(cleanText.length, maxLength);
+    if (end < cleanText.length) {
+      const spaceIdx = cleanText.lastIndexOf(' ', end);
+      if (spaceIdx > Math.floor(maxLength * 0.6)) end = spaceIdx;
+    }
   }
 
   let snippetWindow = cleanText.slice(start, end);
   if (start > 0) snippetWindow = '...' + snippetWindow;
   if (end < cleanText.length) snippetWindow = snippetWindow + '...';
 
-  let escaped = escapeHtml(snippetWindow);
+  // Perform highlighting directly on the clean plain text window,
+  // HTML-escaping each chunk to ensure zero DOM entity corruption.
+  highlightRegex.lastIndex = 0;
+  let result = '';
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
 
-  // Apply subtle editorial regex highlighting
-  const escapedTerms = validTerms.map((t) => escapeHtml(t));
-  const pattern = new RegExp(`(${escapedTerms.map(escapeRegExp).join('|')})`, 'gi');
-  escaped = escaped.replace(
-    pattern,
-    '<mark class="bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold px-0.5 rounded">$1</mark>'
-  );
+  while ((m = highlightRegex.exec(snippetWindow)) !== null) {
+    const matchStart = m.index;
+    const matchEnd = m.index + m[0].length;
 
-  return escaped;
+    result += escapeHtml(snippetWindow.slice(lastIndex, matchStart));
+    result += `<mark class="bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold px-0.5 rounded">${escapeHtml(m[0])}</mark>`;
+    lastIndex = matchEnd;
+  }
+  result += escapeHtml(snippetWindow.slice(lastIndex));
+
+  return result;
 }
 
 export class LocalBengaliSearchEngine implements SearchEngine {
@@ -209,6 +253,9 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       highlightTerms.add(token);
       const stemmed = stemBengaliToken(token);
       expandedStems.add(stemmed);
+      if (stemmed && stemmed.length >= 2 && !isStopWord(stemmed)) {
+        highlightTerms.add(stemmed);
+      }
 
       const synonyms = getSynonymsAndVariants(token);
       synonyms.forEach((s) => {
@@ -226,15 +273,63 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       (transliterated.isBanglish && ['oju', 'ojoo', 'wudu', 'wuzu', 'wudhu'].some((w) => rawQuery.toLowerCase().includes(w)))
       || queryTokens.some((t) => isAblutionTerm(t));
 
-    // Construct sanitized FTS5 MATCH query
-    const cleanFtsTerm = (t: string) => t.replace(/["*^:()\-]/g, ' ').trim();
-    const candidateTerms = Array.from(
-      new Set([rawQuery, primaryQuery, ...queryTokens, ...Array.from(expandedSynonyms).slice(0, 10)])
-    )
-      .map(cleanFtsTerm)
-      .filter((t) => t.length > 0);
+    // Extract AI Semantic Intent in background (cached & safe timeout)
+    const aiIntent = await extractSemanticFiqhIntent(rawQuery);
+    if (aiIntent?.fiqhTerms) {
+      aiIntent.fiqhTerms.forEach((ft) => {
+        expandedSynonyms.add(ft);
+        highlightTerms.add(ft);
+      });
+    }
 
-    const ftsMatch = candidateTerms.map((t) => `"${t}"*`).join(' OR ');
+    const cleanFtsTerm = (t: string) => t.replace(/["*^:()\-]/g, ' ').trim();
+
+    // 2. High-Precision FTS5 Query Construction
+    let ftsMatch = '';
+
+    if (queryTokens.length >= 2) {
+      const phrases: string[] = [
+        cleanFtsTerm(primaryQuery),
+        cleanFtsTerm(rawQuery),
+        ...(aiIntent?.fiqhTerms || []).map(cleanFtsTerm),
+      ].filter((p) => p && p.length >= 2);
+
+      const phraseClauses = Array.from(new Set(phrases)).map((p) => `"${p}"*`);
+
+      // Subject + Action or multi-token conjunctions
+      const mainTokens = queryTokens.slice(0, 3).map(cleanFtsTerm).filter(Boolean);
+      const andClause = mainTokens.map((t) => `"${t}"*`).join(' AND ');
+
+      const conjunctions: string[] = [`(${andClause})`];
+
+      // Special handling for common posture / ritual queries (e.g. Sijda + Sitting)
+      const hasSijdaWord = queryTokens.some((t) => t.includes('সিজদ'));
+      const hasBosaWord = queryTokens.some((t) => t.includes('বস') || t.includes('বৈঠক'));
+
+      if (hasSijdaWord && hasBosaWord) {
+        conjunctions.push('("সিজদা"* AND "বসা"*)');
+        conjunctions.push('("সিজদা"* AND "বৈঠক"*)');
+        conjunctions.push('("সিজদার"* AND "পর"*)');
+        conjunctions.push('("দুই"* AND "সিজদা"*)');
+      }
+
+      // Conjunction of expanded synonym groups
+      if (mainTokens.length >= 2) {
+        const groupAnd = mainTokens
+          .map((t) => {
+            const syns = getSynonymsAndVariants(t).slice(0, 3).map(cleanFtsTerm).filter(Boolean);
+            return '(' + syns.map((s) => `"${s}"*`).join(' OR ') + ')';
+          })
+          .join(' AND ');
+        conjunctions.push(`(${groupAnd})`);
+      }
+
+      ftsMatch = Array.from(new Set([...phraseClauses, ...conjunctions])).join(' OR ');
+    } else {
+      const single = cleanFtsTerm(queryTokens[0] || primaryQuery);
+      const syns = getSynonymsAndVariants(single).slice(0, 8).map(cleanFtsTerm).filter(Boolean);
+      ftsMatch = syns.map((s) => `"${s}"*`).join(' OR ');
+    }
 
     // Filter clauses
     const whereClauses: string[] = ['fatwas_fts MATCH ?'];
@@ -257,14 +352,35 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     const hasFilters = Boolean(sourceFilter || categoryFilter || scholarFilter);
 
     // Fast candidate retrieval: Fetch top candidate IDs and BM25 rank
-    const candidateRows = db.prepare(`
+    let candidateRows = db.prepare(`
       SELECT fts.id, bm25(fatwas_fts, 5.0, 3.0, 1.0, 1.0, 1.0, 1.5) as rank
       FROM fatwas_fts fts
       JOIN fatwas f ON f.id = fts.id
       WHERE ${whereSql}
       ORDER BY rank
-      LIMIT 120
+      LIMIT 150
     `).all(...filterParams) as Array<{ id: string; rank: number }>;
+
+    // Graceful fallback: If precision query returned 0 candidates, broaden query
+    if (candidateRows.length === 0 && queryTokens.length >= 2) {
+      const fallbackTerms = Array.from(
+        new Set([rawQuery, primaryQuery, ...queryTokens, ...Array.from(expandedSynonyms).slice(0, 6)])
+      )
+        .map(cleanFtsTerm)
+        .filter((t) => t.length > 0);
+      const fallbackMatch = fallbackTerms.map((t) => `"${t}"*`).join(' OR ');
+      filterParams[0] = fallbackMatch;
+      ftsMatch = fallbackMatch;
+
+      candidateRows = db.prepare(`
+        SELECT fts.id, bm25(fatwas_fts, 5.0, 3.0, 1.0, 1.0, 1.0, 1.5) as rank
+        FROM fatwas_fts fts
+        JOIN fatwas f ON f.id = fts.id
+        WHERE ${whereSql}
+        ORDER BY rank
+        LIMIT 100
+      `).all(...filterParams) as Array<{ id: string; rank: number }>;
+    }
 
     // Total count for pagination
     let total = 0;
@@ -312,6 +428,16 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     // Re-ranking & Precision Relevance Scoring
     const scoredDocs: Array<{ doc: FatwaQA; finalScore: number; matchedTerms: string[] }> = [];
 
+    const allFiqhTerms = [
+      'জালসায়ে ইস্তিরাহাত',
+      'ইস্তিরাহাত',
+      'দুই সিজদার মধ্যবর্তী বৈঠক',
+      'দুই সিজদার মাঝে বসা',
+      'সিজদার পর বসা',
+      'দুই সিজদার পর',
+      ...(aiIntent?.fiqhTerms || []),
+    ].map((t) => t.toLowerCase());
+
     for (const d of docs) {
       const doc: FatwaQA = {
         ...d,
@@ -325,9 +451,27 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       const answerLower = (doc.answer || '').toLowerCase();
       const matchedForDoc = new Set<string>();
 
-      // Exact phrase match in title boost
-      if (titleLower.includes(normalizedQuery.toLowerCase())) {
-        score += 80.0;
+      // Exact full query phrase match
+      if (titleLower.includes(normalizedQuery.toLowerCase()) || titleLower.includes(primaryQuery.toLowerCase())) {
+        score += 160.0;
+        matchedForDoc.add(primaryQuery);
+      } else if (questionLower.includes(normalizedQuery.toLowerCase()) || questionLower.includes(primaryQuery.toLowerCase())) {
+        score += 90.0;
+        matchedForDoc.add(primaryQuery);
+      }
+
+      // AI Fiqh Concept Matches
+      for (const term of allFiqhTerms) {
+        if (titleLower.includes(term)) {
+          score += 180.0;
+          matchedForDoc.add(term);
+        } else if (questionLower.includes(term)) {
+          score += 130.0;
+          matchedForDoc.add(term);
+        } else if (answerLower.includes(term)) {
+          score += 60.0;
+          matchedForDoc.add(term);
+        }
       }
 
       // Check token and synonym matches
@@ -350,9 +494,34 @@ export class LocalBengaliSearchEngine implements SearchEngine {
           score += 12.0;
           matchedForDoc.add(syn);
         } else if (answerLower.includes(syn)) {
-          score += 3.0;
+          score += 4.0;
           matchedForDoc.add(syn);
         }
+      }
+
+      // Co-occurrence of Subject and Action (e.g. Sijda + Sitting)
+      const hasSijda = titleLower.includes('সিজদা') || questionLower.includes('সিজদা');
+      const hasBosa =
+        titleLower.includes('বসা') ||
+        questionLower.includes('বসা') ||
+        titleLower.includes('বৈঠক') ||
+        questionLower.includes('বৈঠক') ||
+        titleLower.includes('ইস্তিরাহ') ||
+        questionLower.includes('ইস্তিরাহ') ||
+        answerLower.includes('ইস্তিরাহ');
+      const hasPor =
+        titleLower.includes('পর') ||
+        questionLower.includes('পর') ||
+        titleLower.includes('মাঝে') ||
+        questionLower.includes('মাঝে');
+
+      if (hasSijda && hasBosa && hasPor) {
+        score += 140.0;
+      } else if (hasSijda && hasBosa) {
+        score += 90.0;
+      } else if (hasSijda && !hasBosa && queryTokens.some((t) => t.includes('বস') || t.includes('বৈঠক'))) {
+        // Query specifically asked for sitting after/between sijda, but document only mentions sijda
+        score = score * 0.15;
       }
 
       // Phonetic matching

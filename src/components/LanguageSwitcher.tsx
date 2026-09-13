@@ -43,7 +43,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
             onClick={() => setLang(item.code)}
             title={item.nativeName}
             className={cn(
-              "px-2 py-1 rounded-md text-[11px] font-medium transition-all duration-150 relative",
+              "px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-medium transition-all duration-150 relative",
               item.fontClass,
               isActive
                 ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-semibold border border-zinc-200/60 dark:border-zinc-700/60"

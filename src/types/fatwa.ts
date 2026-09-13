@@ -18,6 +18,7 @@ export interface FatwaQA {
 }
 
 export interface IngestItemInput {
+  id?: string;
   source: FatwaSource | string;
   source_url: string;
   title: string;

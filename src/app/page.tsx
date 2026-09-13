@@ -146,7 +146,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-[#fcfcfc] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 transition-colors">
       <Header />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pb-20">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 pb-16 sm:pb-20">
         {/* Command-style Search Hero with instant previews */}
         <SearchHero
           query={query}
@@ -175,11 +175,11 @@ export default function Home() {
         />
 
         {/* Results Container with Optimistic Skeleton */}
-        <div className="w-full max-w-3xl mx-auto space-y-4">
+        <div className="w-full max-w-3xl mx-auto space-y-3 sm:space-y-4">
           {isLoading && results.length === 0 ? (
             <SkeletonLoader />
           ) : results.length > 0 ? (
-            <div className="space-y-3.5">
+            <div className="space-y-2.5 sm:space-y-3.5">
               {results.map((item) => (
                 <FatwaCard
                   key={item.id}
@@ -190,7 +190,7 @@ export default function Home() {
 
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <div className="pt-6 pb-2 flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800">
+                <div className="pt-4 sm:pt-6 pb-2 flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     type="button"
                     disabled={page <= 1}
@@ -244,15 +244,15 @@ export default function Home() {
       />
 
       {/* Editorial Archive Footer */}
-      <footer className="border-t border-zinc-200/80 dark:border-zinc-800/80 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className="border-t border-zinc-200/80 dark:border-zinc-800/80 py-4 sm:py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className={lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali" : "font-sans"}>
               {t.footer.archiveNotice}
             </span>
           </div>
-          <div className="flex items-center gap-3 font-mono text-[11px]">
+          <div className="flex items-center gap-2 sm:gap-3 font-mono text-[10px] sm:text-[11px]">
             <span>GET /api/v1/search</span>
             <span>&bull;</span>
             <span className={lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali" : "font-sans"}>

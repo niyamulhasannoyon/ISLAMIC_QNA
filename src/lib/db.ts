@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { FatwaQA, FatwaSource, IngestItemInput, IngestResultItem, SearchFacets } from '@/types/fatwa';
-import { computeFatwaHash, normalizeText } from './hash';
+import { computeFatwaHash, normalizeText, hashToUuid } from './hash';
 
 // Singleton instance across hot reloads in Next.js
 declare global {
@@ -219,6 +219,8 @@ interface DbStatements {
   update: Database.Statement;
   getAll: Database.Statement;
   getById: Database.Statement;
+  getByHash: Database.Statement;
+  getByHashPrefix: Database.Statement;
   count: Database.Statement;
   sources: Database.Statement;
   categories: Database.Statement;
@@ -248,6 +250,8 @@ function getStatements(db: Database.Database): DbStatements {
     `),
     getAll: db.prepare('SELECT * FROM fatwas ORDER BY published_date DESC, created_at DESC'),
     getById: db.prepare('SELECT * FROM fatwas WHERE id = ?'),
+    getByHash: db.prepare('SELECT * FROM fatwas WHERE sha256_hash = ?'),
+    getByHashPrefix: db.prepare("SELECT * FROM fatwas WHERE sha256_hash LIKE ? || '%' LIMIT 1"),
     count: db.prepare('SELECT count(*) as count FROM fatwas'),
     sources: db.prepare('SELECT source as name, COUNT(*) as count FROM fatwas GROUP BY source ORDER BY count DESC'),
     categories: db.prepare('SELECT category as name, COUNT(*) as count FROM fatwas GROUP BY category ORDER BY count DESC'),
@@ -320,7 +324,7 @@ function autoSeedIfEmpty(db: Database.Database): void {
               const published_date = item.published_date || item.createdAt || new Date().toISOString().split('T')[0];
               const scraped_at = item.scraped_at || new Date().toISOString();
               const sha256_hash = (item.sha256_hash || computeFatwaHash({ question, answer })).toLowerCase();
-              const id = item.id || crypto.randomUUID();
+              const id = item.id || hashToUuid(sha256_hash);
 
               insertStmt.run(
                 id,
@@ -398,8 +402,8 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
     return { id: existing.id, sha256_hash, status: 'skipped' };
   }
 
-  // Insert new record
-  const id = crypto.randomUUID();
+  // Insert new record with deterministic ID
+  const id = (item as any).id || hashToUuid(sha256_hash);
   stmts.insert.run(
     id,
     source,
@@ -488,13 +492,42 @@ export function getAllFatwas(): FatwaQA[] {
   }));
 }
 
+// Explicit mapping for legacy random UUIDs that may have been generated on past ephemeral instances
+const LEGACY_ID_MAP: Record<string, string> = {
+  // User reported issue: https://deenqna.vercel.app/fatwa/23efcf59-3367-4faf-b7f9-c6e38fbe9442
+  '23efcf59-3367-4faf-b7f9-c6e38fbe9442': '8fdde759-e0e4-e141-c428-487c1eacfa1b',
+};
+
 /**
- * Retrieves a single Fatwa record by ID.
+ * Retrieves a single Fatwa record by ID, legacy alias, SHA-256 hash, or hash prefix.
  */
-export function getFatwaById(id: string): FatwaQA | null {
+export function getFatwaById(rawId: string): FatwaQA | null {
+  if (!rawId || typeof rawId !== 'string') return null;
+  const trimmedId = rawId.trim();
+  const targetId = LEGACY_ID_MAP[trimmedId] || trimmedId;
+  const cleanHex = targetId.replace(/[^a-f0-9]/gi, '').toLowerCase();
+
   const db = getDb();
   const stmts = getStatements(db);
-  const r = stmts.getById.get(id) as any;
+
+  // 1. Try exact primary key ID match
+  let r = stmts.getById.get(targetId) as any;
+
+  // 2. If alias was resolved and differs, try original ID as well
+  if (!r && targetId !== trimmedId) {
+    r = stmts.getById.get(trimmedId) as any;
+  }
+
+  // 3. Try exact SHA-256 hash match
+  if (!r) {
+    r = stmts.getByHash.get(targetId.toLowerCase()) as any;
+  }
+
+  // 4. Try prefix match on SHA-256 hash (UUID hex representation)
+  if (!r && cleanHex.length >= 8) {
+    r = stmts.getByHashPrefix.get(cleanHex) as any;
+  }
+
   if (!r) return null;
 
   return {

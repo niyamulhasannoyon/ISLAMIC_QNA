@@ -96,10 +96,10 @@ export function SearchHero({
   };
 
   return (
-    <div className="w-full pt-10 pb-6 flex flex-col items-center">
+    <div className="w-full pt-4 sm:pt-10 pb-3 sm:pb-6 flex flex-col items-center">
       {/* Editorial Masthead with Asymmetrical Craft */}
-      <div className="text-center max-w-2xl mx-auto mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 text-[11px] font-mono text-zinc-500 dark:text-zinc-400 mb-4 tracking-wider uppercase">
+      <div className="text-center max-w-2xl mx-auto mb-4 sm:mb-8 px-1">
+        <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 text-[10px] sm:text-[11px] font-mono text-zinc-500 dark:text-zinc-400 mb-2.5 sm:mb-4 tracking-wider uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           <span>
             {lang === "ar"
@@ -111,7 +111,7 @@ export function SearchHero({
         </div>
         <h1
           className={cn(
-            "text-3xl sm:text-4xl lg:text-[42px] font-bold tracking-tight text-zinc-900 dark:text-zinc-100 leading-tight",
+            "text-2xl sm:text-4xl lg:text-[42px] font-bold tracking-tight text-zinc-900 dark:text-zinc-100 leading-snug sm:leading-tight",
             lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali-serif" : "font-sans"
           )}
         >
@@ -119,7 +119,7 @@ export function SearchHero({
         </h1>
         <p
           className={cn(
-            "mt-3 text-sm sm:text-base text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xl mx-auto",
+            "mt-2 sm:mt-3 text-xs sm:text-base text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xl mx-auto px-2 line-clamp-2 sm:line-clamp-none",
             lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali" : "font-sans"
           )}
         >
@@ -130,11 +130,11 @@ export function SearchHero({
       {/* Prominent Command-style Search Bar with Dropdown Container */}
       <div ref={containerRef} className="w-full max-w-2xl relative">
         <div className="relative flex items-center bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 focus-within:border-zinc-400 dark:focus-within:border-zinc-600 focus-within:ring-2 focus-within:ring-zinc-100 dark:focus-within:ring-zinc-800/80 rounded-xl shadow-sm transition-all duration-200">
-          <div className="pl-4 pr-2 text-zinc-400 flex items-center justify-center pointer-events-none">
+          <div className="pl-3 sm:pl-4 pr-1.5 sm:pr-2 text-zinc-400 flex items-center justify-center pointer-events-none">
             {isLoading ? (
-              <Loader2 className="h-4.5 w-4.5 text-emerald-500 animate-spin" />
+              <Loader2 className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-emerald-500 animate-spin" />
             ) : (
-              <Search className="h-4.5 w-4.5 text-zinc-400" />
+              <Search className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-zinc-400" />
             )}
           </div>
 
@@ -152,7 +152,7 @@ export function SearchHero({
             placeholder={t.searchHero.placeholder}
             dir={isRTL ? "rtl" : "ltr"}
             className={cn(
-              "w-full py-3.5 px-2 text-sm sm:text-base bg-transparent border-0 outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500",
+              "w-full py-2.5 sm:py-3.5 px-2 text-sm sm:text-base bg-transparent border-0 outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500",
               lang === "ar" ? "font-arabic text-base" : lang === "bn" ? "font-bengali" : "font-sans"
             )}
             autoComplete="off"
@@ -265,14 +265,14 @@ export function SearchHero({
 
         {/* Telemetry & Response Timing Bar */}
         {totalResults !== undefined && (
-          <div className="mt-2.5 px-2 flex items-center justify-between text-xs text-zinc-400">
+          <div className="mt-2 sm:mt-2.5 px-1.5 sm:px-2 flex items-center justify-between text-[11px] sm:text-xs text-zinc-400 font-bengali">
             <span>
               {totalResults === 0
                 ? t.empty.noResultsTitle
                 : `${totalResults} ${t.searchHero.resultsFound}`}
             </span>
             {tookMs !== undefined && tookMs >= 0 && (
-              <span className="font-mono text-[11px] text-zinc-500">
+              <span className="font-mono text-[10px] sm:text-[11px] text-zinc-500">
                 {tookMs.toFixed(1)} {t.searchHero.tookTime}
               </span>
             )}

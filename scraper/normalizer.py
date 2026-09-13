@@ -31,3 +31,13 @@ def compute_fatwa_hash(question: str, answer: str, *args, **kwargs) -> str:
     canonical = f"{norm_question}|{norm_answer}"
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+def hash_to_uuid(sha256_hash: str) -> str:
+    """
+    Deterministically converts a 64-character SHA-256 hash into an RFC-compliant UUID string.
+    Identical to the Next.js TypeScript implementation.
+    """
+    h = re.sub(r"[^a-f0-9]", "", (sha256_hash or "").lower())
+    if len(h) < 32:
+        h = hashlib.sha256((h or "fatwa").encode("utf-8")).hexdigest()
+    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+

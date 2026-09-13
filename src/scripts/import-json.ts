@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { batchUpsertFatwas, closeDb } from '../lib/db';
-import { computeFatwaHash } from '../lib/hash';
+import { computeFatwaHash, hashToUuid } from '../lib/hash';
 import { IngestItemInput, FatwaSource } from '../types/fatwa';
 
 /**
@@ -94,8 +94,10 @@ function parseRawStringItem(raw: string, defaultSource: FatwaSource): IngestItem
   const title = question.length > 120 ? question.slice(0, 117) + '...' : question;
 
   const sha256_hash = computeFatwaHash({ question, answer });
+  const id = hashToUuid(sha256_hash);
 
   return {
+    id,
     source,
     source_url: source === 'at-tahreek' ? 'https://www.at-tahreek.com' : 'https://al-itisam.com',
     title,
@@ -140,8 +142,10 @@ function normalizeItem(item: any, defaultSource: FatwaSource): IngestItemInput |
     const published_date = item.published_date || item.date || item.createdAt || new Date().toISOString().split('T')[0];
 
     const sha256_hash = item.sha256_hash || item.hash || computeFatwaHash({ question, answer });
+    const id = item.id || hashToUuid(sha256_hash);
 
     return {
+      id,
       source,
       source_url,
       title,

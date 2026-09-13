@@ -3,6 +3,7 @@ export type Language = 'bn' | 'en' | 'ar';
 export interface TranslationSchema {
   header: {
     brandTitle: string;
+    brandShortTitle: string;
     brandSubtitle: string;
     archiveStatus: string;
     archiveStatusShort: string;
@@ -76,6 +77,7 @@ export const translations: Record<Language, TranslationSchema> = {
   bn: {
     header: {
       brandTitle: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
+      brandShortTitle: "ফতোয়া আর্কাইভ",
       brandSubtitle: "/ আল-ইতিসাম • আত-তাহরীক • আলকাউসার",
       archiveStatus: "সংরক্ষণাগার সক্রিয়",
       archiveStatusShort: "লাইভ",
@@ -162,6 +164,7 @@ export const translations: Record<Language, TranslationSchema> = {
   en: {
     header: {
       brandTitle: "Islamic Fatwa Archive",
+      brandShortTitle: "Fatwa Archive",
       brandSubtitle: "/ Al-I'tisam • At-Tahreek • Al-Kawsar",
       archiveStatus: "Archive Active",
       archiveStatusShort: "Live",
@@ -248,6 +251,7 @@ export const translations: Record<Language, TranslationSchema> = {
   ar: {
     header: {
       brandTitle: "أرشيف الفتاوى والبحوث الإسلامية",
+      brandShortTitle: "أرشيف الفتاوى",
       brandSubtitle: "/ الاعتصام • التحريك • الكوثر",
       archiveStatus: "الأرشيف نشط",
       archiveStatusShort: "مباشر",

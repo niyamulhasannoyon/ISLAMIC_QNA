@@ -3,9 +3,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFatwaById, getRelatedFatwas } from "@/lib/db";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, getSiteUrl } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { ShareButtons } from "@/components/ShareButtons";
+import { FatwaQA } from "@/types/fatwa";
 import {
   ArrowLeft,
   ExternalLink,
@@ -19,16 +20,50 @@ import {
   BookOpen,
 } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: {
     id: string;
   };
 }
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "https://fatwa-archive.vercel.app";
+// Resilient dual-layer fatwa loader: checks local SQLite DB first, then falls back
+// to the authoritative /api/v1/fatwa endpoint if container storage differs
+async function fetchFatwaResilient(id: string): Promise<FatwaQA | null> {
+  if (!id) return null;
+
+  // 1. Direct local database query (supports deterministic ID, legacy alias, or sha256_hash)
+  try {
+    const local = getFatwaById(id);
+    if (local) return local;
+  } catch (err) {
+    console.warn("[FatwaPage] local getFatwaById lookup error:", err);
+  }
+
+  // 2. Resilient API fallback across ephemeral Vercel Serverless containers
+  try {
+    const siteUrl = getSiteUrl();
+    const apiUrl = `${siteUrl}/api/v1/fatwa/${encodeURIComponent(id)}`;
+    const res = await fetch(apiUrl, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.id && data.title) {
+        return data as FatwaQA;
+      }
+    }
+  } catch (apiErr) {
+    console.warn("[FatwaPage] API fallback fetch error:", apiErr);
+  }
+
+  return null;
+}
 
 // Helper to strip HTML and condense whitespace for clean SERP meta descriptions
 function cleanTextSnippet(text: string, maxLength: number = 155): string {
@@ -38,11 +73,18 @@ function cleanTextSnippet(text: string, maxLength: number = 155): string {
     .replace(/\s+/g, " ")
     .trim();
   if (clean.length <= maxLength) return clean;
-  return clean.slice(0, maxLength - 3) + "...";
+  let end = maxLength - 3;
+  const spaceIdx = clean.lastIndexOf(" ", end);
+  if (spaceIdx > Math.floor(maxLength * 0.6)) {
+    end = spaceIdx;
+  }
+  return clean.slice(0, end) + "...";
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const fatwa = getFatwaById(params.id);
+  const fatwa = await fetchFatwaResilient(params.id);
+  const siteUrl = getSiteUrl();
+
   if (!fatwa) {
     return {
       title: "ফতোয়া পাওয়া যায়নি | ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
@@ -123,11 +165,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function FatwaPage({ params }: Props) {
-  const fatwa = getFatwaById(params.id);
+  const fatwa = await fetchFatwaResilient(params.id);
   if (!fatwa) {
     notFound();
   }
 
+  const siteUrl = getSiteUrl();
   const relatedFatwas = getRelatedFatwas(fatwa.category, fatwa.id, 5);
   const canonicalUrl = `${siteUrl}/fatwa/${fatwa.id}`;
 
@@ -216,11 +259,11 @@ export default async function FatwaPage({ params }: Props) {
 
       <Header />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-3.5 sm:px-6 py-4 sm:py-8">
         {/* Navigation & Breadcrumb Bar */}
         <nav
           aria-label="Breadcrumb"
-          className="mb-6 flex items-center justify-between flex-wrap gap-3 text-xs text-zinc-500 dark:text-zinc-400"
+          className="mb-4 sm:mb-6 flex items-center justify-between flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400"
         >
           <div className="flex items-center gap-1.5 flex-wrap font-bengali">
             <Link
@@ -228,7 +271,7 @@ export default async function FatwaPage({ params }: Props) {
               className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors font-medium"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>হোম / অনুসন্ধান</span>
+              <span>হোম</span>
             </Link>
             <ChevronRight className="h-3 w-3 text-zinc-400" />
             <Link
@@ -239,21 +282,21 @@ export default async function FatwaPage({ params }: Props) {
               <span>{fatwa.category}</span>
             </Link>
             <ChevronRight className="h-3 w-3 text-zinc-400" />
-            <span className="text-zinc-700 dark:text-zinc-300 font-medium truncate max-w-[200px] sm:max-w-xs">
+            <span className="text-zinc-700 dark:text-zinc-300 font-medium truncate max-w-[150px] sm:max-w-xs">
               {fatwa.title}
             </span>
           </div>
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors font-bengali"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors font-bengali"
           >
-            <span>অন্যান্য ফতোয়া খুঁজুন</span>
+            <span>অনুসন্ধান</span>
           </Link>
         </nav>
 
         {/* Primary Article Container */}
-        <article className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-8 shadow-sm">
+        <article className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/90 rounded-xl sm:rounded-2xl p-4 sm:p-8 shadow-sm">
           {/* Metadata Header Row */}
           <header className="pb-5 mb-6 border-b border-zinc-100 dark:border-zinc-800/80">
             <div className="flex flex-wrap items-center gap-2 mb-4 text-xs font-bengali">
