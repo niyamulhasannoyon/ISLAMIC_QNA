@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOrUpdateUser, findUserByEmail } from "@/lib/db";
+import { createOrUpdateUser } from "@/lib/db";
 import { verifyGoogleToken, setUserSession } from "@/lib/userAuth";
-import { setAdminSession, getAdminCredentials } from "@/lib/auth";
+import { setAdminSession, isAllowedAdminEmail } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +33,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { username: adminUsername } = getAdminCredentials();
-    const isTargetAdmin =
-      isAdminLogin ||
-      googleProfile.email.toLowerCase().includes("admin") ||
-      googleProfile.email.toLowerCase().startsWith(adminUsername.toLowerCase());
+    const emailLower = googleProfile.email.toLowerCase().trim();
+    const isAdminAuthorized = isAllowedAdminEmail(emailLower);
 
-    const role = isTargetAdmin ? "admin" : "user";
+    // If user attempts Admin login, but email is NOT authorized, reject access
+    if (isAdminLogin && !isAdminAuthorized) {
+      return NextResponse.json(
+        {
+          error: `দুঃখিত, এই ইমেইল (${googleProfile.email}) দিয়ে এডমিন প্যানেলে প্রবেশের অনুমতি নেই। কেবল niyamulhasanbd@gmail.com এবং niyamulhasan1089@gmail.com ইমেইল দুটি দিয়ে এডমিন প্যানেলে প্রবেশ করা সম্ভব।`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const role = isAdminAuthorized ? "admin" : "user";
 
     // Create or update Google user profile in SQLite
     const user = createOrUpdateUser({

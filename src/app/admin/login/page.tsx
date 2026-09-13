@@ -72,8 +72,8 @@ export default function AdminLoginPage() {
           isAdminLogin: true,
           mockUser: !googleCredential
             ? {
-                email: 'admin@islamicqna.org',
-                name: 'এডমিন (Google Account)',
+                email: 'niyamulhasanbd@gmail.com',
+                name: 'নিয়ামুল হাসান (Admin)',
                 picture: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
               }
             : undefined,

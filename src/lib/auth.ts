@@ -1,7 +1,18 @@
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
+import { getCurrentUserSession } from './userAuth';
 
 const ADMIN_COOKIE_NAME = 'is_admin_session';
+
+export const ALLOWED_ADMIN_EMAILS = [
+  'niyamulhasanbd@gmail.com',
+  'niyamulhasan1089@gmail.com',
+];
+
+export function isAllowedAdminEmail(email: string): boolean {
+  if (!email) return false;
+  return ALLOWED_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
 
 export function getAdminCredentials() {
   const username = process.env.ADMIN_USERNAME || 'admin';
@@ -34,12 +45,27 @@ export async function setAdminSession(username: string): Promise<string> {
 }
 
 export async function isAdminAuthenticated(): Promise<boolean> {
+  // 1. Check direct admin cookie session
   const cookieStore = cookies();
   const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
-  if (!token) return false;
-  const { username } = getAdminCredentials();
-  const expectedToken = generateSessionToken(username);
-  return token === expectedToken;
+  if (token) {
+    const { username } = getAdminCredentials();
+    const expectedToken = generateSessionToken(username);
+    if (token === expectedToken) return true;
+
+    // Check if token corresponds to an allowed admin email
+    for (const email of ALLOWED_ADMIN_EMAILS) {
+      if (token === generateSessionToken(email)) return true;
+    }
+  }
+
+  // 2. Check user session cookie
+  const userSession = await getCurrentUserSession();
+  if (userSession && userSession.role === 'admin' && isAllowedAdminEmail(userSession.email)) {
+    return true;
+  }
+
+  return false;
 }
 
 export async function clearAdminSession(): Promise<void> {
