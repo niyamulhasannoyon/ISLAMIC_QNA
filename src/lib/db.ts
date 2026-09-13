@@ -23,13 +23,21 @@ function getDatabasePath(): string {
     const tmpDbPath = path.join('/tmp', 'fatwas.db');
     const sourceDbPath = path.join(process.cwd(), 'data', 'fatwas.db');
 
-    if (!fs.existsSync(tmpDbPath)) {
-      if (fs.existsSync(sourceDbPath)) {
-        try {
-          fs.copyFileSync(sourceDbPath, tmpDbPath);
-        } catch (e) {
-          console.warn('[Vercel SQLite Copy Warning]:', e);
+    if (fs.existsSync(sourceDbPath)) {
+      try {
+        let shouldCopy = !fs.existsSync(tmpDbPath);
+        if (!shouldCopy) {
+          const sourceStat = fs.statSync(sourceDbPath);
+          const tmpStat = fs.statSync(tmpDbPath);
+          if (sourceStat.size !== tmpStat.size || sourceStat.mtimeMs > tmpStat.mtimeMs) {
+            shouldCopy = true;
+          }
         }
+        if (shouldCopy) {
+          fs.copyFileSync(sourceDbPath, tmpDbPath);
+        }
+      } catch (e) {
+        console.warn('[Vercel SQLite Copy Warning]:', e);
       }
     }
     return tmpDbPath;

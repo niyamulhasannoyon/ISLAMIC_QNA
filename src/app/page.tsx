@@ -85,6 +85,11 @@ export default function Home() {
     const urlParams = new URLSearchParams(window.location.search);
     const initialId = urlParams.get("id");
     const initialQ = urlParams.get("q");
+    const initialSource = urlParams.get("source");
+
+    if (initialSource && isInitialMount.current) {
+      setSelectedSource(initialSource);
+    }
 
     if (initialQ && isInitialMount.current) {
       setQuery(initialQ);
@@ -218,6 +223,9 @@ export default function Home() {
               onSuggestionClick={(sug) => {
                 setQuery(sug);
                 setDebouncedQuery(sug);
+                setSelectedSource("All");
+                setSelectedCategory("All");
+                setSelectedScholar("All");
               }}
             />
           )}

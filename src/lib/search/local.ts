@@ -2,6 +2,7 @@ import MiniSearch, { SearchResult } from 'minisearch';
 import { FatwaQA, SearchQueryOptions, SearchResponse, SearchResultItem } from '@/types/fatwa';
 import { getAllFatwas, getFacets } from '../db';
 import { escapeRegExp } from '../utils';
+import { normalizeText } from '../hash';
 import { SearchEngine } from './types';
 
 function escapeHtml(unsafe: string): string {
@@ -133,8 +134,9 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       // Custom tokenizer matching Unicode Bengali, Arabic, and Latin alphabets with combining marks
       tokenize: (text) => {
         if (!text) return [];
-        const tokens = text.match(/[\p{L}\p{M}\p{N}]+/gu);
-        return tokens ? tokens.map((t) => t.toLowerCase()) : [];
+        const norm = normalizeText(text).toLowerCase();
+        const tokens = norm.match(/[\p{L}\p{M}\p{N}]+/gu);
+        return tokens ? tokens : [];
       },
     });
   }
@@ -165,7 +167,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       await this.init();
     }
 
-    const query = (options.q || '').trim();
+    const query = normalizeText(options.q || '');
     const sourceFilter = options.source && options.source !== 'All' ? options.source.toLowerCase() : undefined;
     const categoryFilter = options.category && options.category !== 'All' ? options.category.toLowerCase() : undefined;
     const scholarFilter = options.scholar && options.scholar !== 'All' ? options.scholar.toLowerCase() : undefined;
