@@ -1,4 +1,4 @@
-export type FatwaSource = 'al-itisam' | 'at-tahreek';
+export type FatwaSource = 'al-itisam' | 'at-tahreek' | 'al-kawsar';
 
 export interface FatwaQA {
   id: string;

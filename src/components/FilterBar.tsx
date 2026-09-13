@@ -56,6 +56,7 @@ export function FilterBar({
     { name: "All", label: t.filters.allArchives },
     { name: "al-itisam", label: "Al-I'tisam (আল-ইতিসাম)" },
     { name: "at-tahreek", label: "At-Tahreek (আত-তাহরীক)" },
+    { name: "al-kawsar", label: "Al-Kawsar (আলকাউসার)" },
   ];
 
   const getSourceCount = (srcName: string) => {
@@ -66,7 +67,8 @@ export function FilterBar({
       (f) =>
         f.name.toLowerCase() === srcName.toLowerCase() ||
         (srcName === "al-itisam" && f.name.toLowerCase().includes("itisam")) ||
-        (srcName === "at-tahreek" && f.name.toLowerCase().includes("tahreek"))
+        (srcName === "at-tahreek" && f.name.toLowerCase().includes("tahreek")) ||
+        (srcName === "al-kawsar" && (f.name.toLowerCase().includes("kawsar") || f.name.toLowerCase().includes("kausar")))
     );
     return found ? found.count : 0;
   };
@@ -75,6 +77,7 @@ export function FilterBar({
     if (selectedSource === "All") return t.filters.allArchives;
     if (selectedSource.toLowerCase().includes("itisam")) return "Al-I'tisam";
     if (selectedSource.toLowerCase().includes("tahreek")) return "At-Tahreek";
+    if (selectedSource.toLowerCase().includes("kawsar") || selectedSource.toLowerCase().includes("kausar")) return "Al-Kawsar (আলকাউসার)";
     return selectedSource;
   };
 
@@ -137,7 +140,8 @@ export function FilterBar({
                   const isSelected =
                     selectedSource.toLowerCase() === src.name.toLowerCase() ||
                     (selectedSource.toLowerCase().includes("itisam") && src.name === "al-itisam") ||
-                    (selectedSource.toLowerCase().includes("tahreek") && src.name === "at-tahreek");
+                    (selectedSource.toLowerCase().includes("tahreek") && src.name === "at-tahreek") ||
+                    ((selectedSource.toLowerCase().includes("kawsar") || selectedSource.toLowerCase().includes("kausar")) && src.name === "al-kawsar");
                   const count = getSourceCount(src.name);
 
                   return (

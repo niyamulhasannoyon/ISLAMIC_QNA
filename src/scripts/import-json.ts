@@ -128,13 +128,15 @@ function normalizeItem(item: any, defaultSource: FatwaSource): IngestItemInput |
     const source: FatwaSource =
       item.source && String(item.source).toLowerCase().includes('tahreek')
         ? 'at-tahreek'
-        : 'al-itisam';
+        : item.source && (String(item.source).toLowerCase().includes('kawsar') || String(item.source).toLowerCase().includes('kausar'))
+        ? 'al-kawsar'
+        : defaultSource;
 
     const category = item.category || inferCategory(question + ' ' + answer);
     const title = item.title || (question.length > 120 ? question.slice(0, 117) + '...' : question);
-    const scholar = item.scholar || (source === 'at-tahreek' ? 'ড. মুহাম্মাদ আসাদুল্লাহ আল-গালিব' : 'আল-ইতিসাম ফতোয়া বোর্ড');
+    const scholar = item.scholar || (source === 'at-tahreek' ? 'ড. মুহাম্মাদ আসাদুল্লাহ আল-গালিব' : source === 'al-kawsar' ? 'মারকাযুদ দাওয়াহ / আলকাউসার' : 'আল-ইতিসাম ফতোয়া বোর্ড');
     const tags = Array.isArray(item.tags) ? item.tags : [category.split(' ')[0]];
-    const source_url = item.source_url || (source === 'at-tahreek' ? 'https://www.at-tahreek.com' : 'https://al-itisam.com');
+    const source_url = item.source_url || (source === 'at-tahreek' ? 'https://www.at-tahreek.com' : source === 'al-kawsar' ? 'https://www.alkawsar.com' : 'https://al-itisam.com');
     const published_date = item.published_date || item.date || item.createdAt || new Date().toISOString().split('T')[0];
 
     const sha256_hash = item.sha256_hash || item.hash || computeFatwaHash({ question, answer });
@@ -210,7 +212,11 @@ export async function runImport(filePath?: string) {
     const itemsArray = Array.isArray(rawData) ? rawData : [rawData];
     console.log(`Total records in file: ${itemsArray.length}`);
 
-    const defaultSource: FatwaSource = filename.toLowerCase().includes('tahreek') ? 'at-tahreek' : 'al-itisam';
+    const defaultSource: FatwaSource = filename.toLowerCase().includes('tahreek')
+      ? 'at-tahreek'
+      : filename.toLowerCase().includes('kawsar') || filename.toLowerCase().includes('kausar')
+      ? 'al-kawsar'
+      : 'al-itisam';
 
     const validItems: IngestItemInput[] = [];
     const seenHashes = new Set<string>();

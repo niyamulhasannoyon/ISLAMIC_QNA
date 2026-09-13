@@ -49,6 +49,7 @@ function getDatabasePath(): string {
 function canonicalizeSource(src: string): FatwaSource {
   const lower = (src || '').toLowerCase();
   if (lower.includes('tahreek')) return 'at-tahreek';
+  if (lower.includes('kawsar') || lower.includes('kausar')) return 'al-kawsar';
   return 'al-itisam';
 }
 
@@ -183,7 +184,7 @@ export function upsertFatwa(item: IngestItemInput): UpsertResult {
   const source_url = item.source_url.trim();
   const category = (item.category && item.category.trim()) || 'General';
   const tags = JSON.stringify(item.tags || []);
-  const scholar = normalizeText(item.scholar) || (source === 'at-tahreek' ? 'আল-মারকাযুল ইসলামী' : 'ফতোয়া বোর্ড');
+  const scholar = normalizeText(item.scholar) || (source === 'at-tahreek' ? 'আল-মারকাযুল ইসলামী' : source === 'al-kawsar' ? 'মারকাযুদ দাওয়াহ / আলকাউসার' : 'ফতোয়া বোর্ড');
   
   const now = new Date().toISOString();
   const published_date = item.published_date || item.createdAt || now;

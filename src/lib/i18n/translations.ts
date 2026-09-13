@@ -76,7 +76,7 @@ export const translations: Record<Language, TranslationSchema> = {
   bn: {
     header: {
       brandTitle: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
-      brandSubtitle: "/ আল-ইতিসাম • আত-তাহরীক",
+      brandSubtitle: "/ আল-ইতিসাম • আত-তাহরীক • আলকাউসার",
       archiveStatus: "সংরক্ষণাগার সক্রিয়",
       archiveStatusShort: "লাইভ",
       toggleTheme: "থিম পরিবর্তন করুন",
@@ -137,7 +137,7 @@ export const translations: Record<Language, TranslationSchema> = {
       noResultsHint: "বানান পরীক্ষা করুন অথবা বিকল্প মূল শব্দ দিয়ে অনুসন্ধান করুন।",
       suggestedQueries: "প্রস্তাবিত অনুসন্ধানসমূহ",
       authenticArchiveTitle: "যাচাইকৃত ইসলামিক গবেষণা আর্কাইভ",
-      authenticArchiveSubtitle: "আল-ইতিসাম এবং আত-তাহরীক থেকে সহীহ ফতোয়া ও সমাধান অনুসন্ধানে যেকোনো শব্দ টাইপ করুন",
+      authenticArchiveSubtitle: "আল-ইতিসাম, আত-তাহরীক এবং মাসিক আলকাউসার থেকে সহীহ ফতোয়া ও সমাধান অনুসন্ধানে যেকোনো শব্দ টাইপ করুন",
       popularInquiries: "জনপ্রিয় অনুসন্ধান:",
       suggestions: [
         { text: "সালাতে রাফউল ইয়াদাইন", desc: "হাদীস ও ফিকহ বিধান" },
@@ -154,7 +154,7 @@ export const translations: Record<Language, TranslationSchema> = {
       pageOf: "পৃষ্ঠা",
     },
     footer: {
-      archiveNotice: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ • আল-ইতিসাম ও আত-তাহরীক সমন্বিত",
+      archiveNotice: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ • আল-ইতিসাম, আত-তাহরীক ও আলকাউসার সমন্বিত",
       apiInfo: "SHA-256 সুরক্ষিত ও যাচাইকৃত",
     },
   },
@@ -162,7 +162,7 @@ export const translations: Record<Language, TranslationSchema> = {
   en: {
     header: {
       brandTitle: "Islamic Fatwa Archive",
-      brandSubtitle: "/ Al-I'tisam • At-Tahreek",
+      brandSubtitle: "/ Al-I'tisam • At-Tahreek • Al-Kawsar",
       archiveStatus: "Archive Active",
       archiveStatusShort: "Live",
       toggleTheme: "Toggle theme",
@@ -223,7 +223,7 @@ export const translations: Record<Language, TranslationSchema> = {
       noResultsHint: "Check the spelling or try broader Islamic terminology.",
       suggestedQueries: "Suggested Queries",
       authenticArchiveTitle: "Authentic Islamic Scholarly Index",
-      authenticArchiveSubtitle: "Search peer-reviewed rulings and verified legal solutions from Al-I'tisam and At-Tahreek archives",
+      authenticArchiveSubtitle: "Search peer-reviewed rulings and verified legal solutions from Al-I'tisam, At-Tahreek, and Al-Kawsar archives",
       popularInquiries: "Popular Inquiries:",
       suggestions: [
         { text: "Raf al-Yadayn in Salah", desc: "Hadith & Fiqh Ruling" },
@@ -240,7 +240,7 @@ export const translations: Record<Language, TranslationSchema> = {
       pageOf: "Page",
     },
     footer: {
-      archiveNotice: "Islamic Fatwa & Research Archive • Aggregating Al-I'tisam & At-Tahreek",
+      archiveNotice: "Islamic Fatwa & Research Archive • Aggregating Al-I'tisam, At-Tahreek & Al-Kawsar",
       apiInfo: "SHA-256 Verified & Idempotent",
     },
   },
@@ -248,7 +248,7 @@ export const translations: Record<Language, TranslationSchema> = {
   ar: {
     header: {
       brandTitle: "أرشيف الفتاوى والبحوث الإسلامية",
-      brandSubtitle: "/ الاعتصام • التحريك",
+      brandSubtitle: "/ الاعتصام • التحريك • الكوثر",
       archiveStatus: "الأرشيف نشط",
       archiveStatusShort: "مباشر",
       toggleTheme: "تبديل المظهر",
@@ -298,7 +298,7 @@ export const translations: Record<Language, TranslationSchema> = {
       originalFatwa: "زيارة المصدر الأصلي",
       tags: "الكلمات الدلالية",
       shaFingerprint: "البصمة التشفيرية الرقمية (SHA-256)",
-      verifiedNotice: "هذه الفتوى موثقة تشفيرياً ببصمة رقمية مستخرجة بدقة من نص السؤال والجواب لمنع أي تعديل أو تكرار.",
+      verifiedNotice: "هذه الفتوى موثقة تشفيرياً ببصمة رقمية مستخرجة بدقة من نص السؤال والجواب لمنع أي تعديل أو تكرার.",
       close: "إغلاق (Esc)",
       scholar: "المفتي",
       category: "الموضوع",
@@ -309,7 +309,7 @@ export const translations: Record<Language, TranslationSchema> = {
       noResultsHint: "يرجى التحقق من صحة الإملاء أو تجربة كلمات بحث أخرى.",
       suggestedQueries: "مسائل مقترحة للبحث",
       authenticArchiveTitle: "الأرشيف العلمي للفتاوى المعتمدة",
-      authenticArchiveSubtitle: "ابحث في الفتاوى المحققة والحلول الشرعية من مجلتي الاعتصام والتحريك",
+      authenticArchiveSubtitle: "ابحث في الفتاوى المحققة والحلول الشرعية من مجلات الاعتصام والتحريك والكوثر",
       popularInquiries: "المسائل الشائعة:",
       suggestions: [
         { text: "رفع اليدين في الصلاة", desc: "أحكام الفقه والحديث" },
@@ -326,7 +326,7 @@ export const translations: Record<Language, TranslationSchema> = {
       pageOf: "صفحة",
     },
     footer: {
-      archiveNotice: "أرشيف الفتاوى والبحوث الإسلامية • جمع مجلتي الاعتصام والتحريك",
+      archiveNotice: "أرشيف الفتاوى والبحوث الإسلامية • جمع مجلات الاعتصام والتحريك والكوثر",
       apiInfo: "موثق بتجزئة SHA-256",
     },
   },

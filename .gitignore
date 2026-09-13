@@ -26,6 +26,7 @@ yarn-error.log*
 .env*.local
 
 # Database
+data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm

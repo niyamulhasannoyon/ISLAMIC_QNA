@@ -58,6 +58,7 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
 
   const isAtTahreek = item.source.toLowerCase().includes("tahreek");
   const isAlItisam = item.source.toLowerCase().includes("itisam");
+  const isAlKawsar = item.source.toLowerCase().includes("kawsar") || item.source.toLowerCase().includes("kausar");
   const displayDate = item.published_date || item.created_at;
   const fullHash = item.sha256_hash || "";
 
@@ -83,6 +84,8 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
                 "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border",
                 isAtTahreek
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60 font-bengali"
+                  : isAlKawsar
+                  ? "bg-teal-50 text-teal-800 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800/60 font-bengali"
                   : isAlItisam
                   ? "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700 font-bengali"
                   : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 font-bengali"
@@ -90,7 +93,13 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
             >
               <span className="text-[10px] font-mono text-zinc-400 uppercase">উৎস:</span>
               <span className="font-semibold">
-                {item.source === "at-tahreek" ? "আত-তাহরীক" : item.source === "al-itisam" ? "আল-ইতিসাম" : item.source}
+                {item.source === "at-tahreek"
+                  ? "আত-তাহরীক"
+                  : item.source === "al-kawsar"
+                  ? "মাসিক আলকাউসার"
+                  : item.source === "al-itisam"
+                  ? "আল-ইতিসাম"
+                  : item.source}
               </span>
             </span>
 

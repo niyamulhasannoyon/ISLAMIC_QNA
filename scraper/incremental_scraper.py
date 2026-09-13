@@ -265,6 +265,82 @@ class LiveFatwaScraper:
         logger.info(f"[At-Tahreek] Extracted {len(results)} new unique Fatwas.")
         return results
 
+    def scrape_al_kawsar(self) -> List[Dict[str, Any]]:
+        logger.info("=== Starting Live Crawl for Al-Kawsar ===")
+        # Check current year and previous year recent monthly archives
+        now = datetime.utcnow()
+        recent_months = []
+        for year in [str(now.year), str(now.year - 1)]:
+            for month in [f"{m:02d}" for m in range(12, 0, -1)]:
+                recent_months.append((year, month))
+
+        results = []
+        for year, month in recent_months[:4]:  # Inspect 4 most recent months
+            url = f"https://www.alkawsar.com/bn/qa/answers/?year={year}&month={month}"
+            html = self.fetch_html(url)
+            if not html:
+                continue
+            soup = BeautifulSoup(html, "html.parser")
+            items = soup.find_all("div", class_=lambda c: c and "item-list-type" in c and "fatawa" in c)
+            if not items:
+                items = soup.find_all("div", class_=lambda c: c and "lx-latest-news-item" in c)
+
+            for item in items:
+                h2s = item.find_all("h2")
+                if not h2s:
+                    continue
+                questioner = normalize_text(h2s[0].get_text()) if len(h2s) >= 2 else ""
+                q_num = normalize_text(h2s[1].get_text()) if len(h2s) >= 2 else normalize_text(h2s[0].get_text())
+
+                post_texts = item.find_all("div", class_="post-text")
+                question_text = normalize_text(post_texts[0].get_text()) if len(post_texts) > 0 else ""
+                answer_text = normalize_text(post_texts[1].get_text()) if len(post_texts) > 1 else ""
+
+                if not question_text and not answer_text:
+                    continue
+
+                bq = item.find("blockquote")
+                if bq:
+                    ref_text = normalize_text(bq.get_text())
+                    if ref_text and ref_text not in answer_text:
+                        answer_text = f"{answer_text}\n\nদলীল ও সূত্র:\n{ref_text}"
+
+                link_el = item.find("a", class_="shareable-link")
+                href = link_el.get("href") if link_el else ""
+                full_url = f"https://www.alkawsar.com{href}" if href and href.startswith("/") else (href or url)
+
+                clean_q_snippet = question_text.split("।")[0].strip() if "।" in question_text else question_text[:90].strip()
+                title = f"{q_num} {clean_q_snippet}" if clean_q_snippet else (q_num or f"আলকাউসার ফতোয়া ({year}-{month})")
+
+                sha256_hash = compute_fatwa_hash(question=question_text, answer=answer_text)
+                if self.state.is_known(sha256_hash):
+                    continue
+
+                category = infer_category(question_text + " " + answer_text)
+                scholar_name = f"মারকাযুদ দাওয়াহ ({questioner})" if questioner else "মারকাযুদ দাওয়াহ / আলকাউসার ফতোয়া বিভাগ"
+
+                results.append({
+                    "source": "al-kawsar",
+                    "source_url": full_url,
+                    "title": title,
+                    "question": question_text or title,
+                    "answer": answer_text,
+                    "category": category,
+                    "tags": [category.split(" ")[0], "আলকাউসার"],
+                    "scholar": scholar_name,
+                    "published_date": f"{year}-{month}-01",
+                    "sha256_hash": sha256_hash,
+                    "scraped_at": datetime.utcnow().isoformat() + "Z",
+                })
+
+                if len(results) >= self.max_items:
+                    break
+            if len(results) >= self.max_items:
+                break
+
+        logger.info(f"[Al-Kawsar] Extracted {len(results)} new unique Fatwas.")
+        return results
+
     def save_direct_to_sqlite(self, items: List[Dict[str, Any]]) -> int:
         if not items:
             return 0
@@ -316,6 +392,8 @@ class LiveFatwaScraper:
             all_items.extend(self.scrape_al_itisam())
         if "at-tahreek" in sources or "all" in sources:
             all_items.extend(self.scrape_at_tahreek())
+        if "al-kawsar" in sources or "all" in sources:
+            all_items.extend(self.scrape_al_kawsar())
 
         logger.info(f"Total newly discovered items across sources: {len(all_items)}")
 
@@ -326,13 +404,12 @@ class LiveFatwaScraper:
         if self.direct_db:
             self.save_direct_to_sqlite(all_items)
         else:
-            # Dispatch to API
             pass
 
 
 def main():
     parser = argparse.ArgumentParser(description="Live Incremental Fatwa Scraper")
-    parser.add_argument("--source", choices=["al-itisam", "at-tahreek", "all"], default="all", help="Target website")
+    parser.add_argument("--source", choices=["al-itisam", "at-tahreek", "al-kawsar", "all"], default="all", help="Target website")
     parser.add_argument("--max-items", type=int, default=100, help="Max items per source to crawl")
     parser.add_argument("--dry-run", action="store_true", help="Preview only")
     args = parser.parse_args()

@@ -98,7 +98,25 @@ async function runTests() {
     throw new Error('Found item with mismatched scholar in scholar-filtered search');
   }
 
-  console.log('\nAll 10 professional search test suites passed successfully!');
+  console.log('\n=== 11. Testing Al-Kawsar Archive Integration ===');
+  const kawsarRes = await searchFatwas({ source: 'al-kawsar' });
+  console.log(`Results for source al-kawsar: ${kawsarRes.total}`);
+  if (kawsarRes.total < 5000) {
+    throw new Error(`Expected at least 5,000 Al-Kawsar records, got ${kawsarRes.total}`);
+  }
+  const allKawsar = kawsarRes.results.every((r) => r.source === 'al-kawsar');
+  if (!allKawsar) {
+    throw new Error('Found item with non-al-kawsar source in al-kawsar filtered search');
+  }
+
+  const kawsarSearch = await searchFatwas({ q: 'কুকুরের লালা', source: 'al-kawsar' });
+  console.log(`Results for 'কুকুরের লালা' in al-kawsar: ${kawsarSearch.total}`);
+  if (kawsarSearch.total === 0) {
+    throw new Error("Expected search 'কুকুরের লালা' in al-kawsar to return results");
+  }
+  console.log(`Top result: ${kawsarSearch.results[0].title}`);
+
+  console.log('\nAll 11 professional search test suites passed successfully!');
 }
 
 runTests().catch((err) => {
