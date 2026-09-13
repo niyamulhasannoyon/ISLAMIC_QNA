@@ -133,6 +133,45 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL,
       UNIQUE(user_id, fatwa_id)
     );
+
+    CREATE TABLE IF NOT EXISTS analytics_visitors (
+      visitor_id TEXT PRIMARY KEY,
+      user_id TEXT,
+      user_email TEXT,
+      user_name TEXT,
+      device_type TEXT NOT NULL DEFAULT 'Desktop',
+      browser TEXT NOT NULL DEFAULT 'Unknown',
+      os TEXT NOT NULL DEFAULT 'Unknown',
+      ip_hash TEXT NOT NULL DEFAULT '',
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      total_pageviews INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS analytics_pageviews (
+      id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      user_id TEXT,
+      user_type TEXT NOT NULL DEFAULT 'guest',
+      user_name TEXT,
+      user_email TEXT,
+      path TEXT NOT NULL,
+      page_title TEXT,
+      fatwa_id TEXT,
+      search_query TEXT,
+      referrer TEXT,
+      device_type TEXT NOT NULL DEFAULT 'Desktop',
+      browser TEXT NOT NULL DEFAULT 'Unknown',
+      os TEXT NOT NULL DEFAULT 'Unknown',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pv_created_at ON analytics_pageviews(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_pv_visitor_id ON analytics_pageviews(visitor_id);
+    CREATE INDEX IF NOT EXISTS idx_pv_user_id ON analytics_pageviews(user_id);
+    CREATE INDEX IF NOT EXISTS idx_pv_user_type ON analytics_pageviews(user_type);
+    CREATE INDEX IF NOT EXISTS idx_pv_path ON analytics_pageviews(path);
+    CREATE INDEX IF NOT EXISTS idx_pv_fatwa_id ON analytics_pageviews(fatwa_id);
   `);
 
   // Handle auto-migration for existing SQLite tables

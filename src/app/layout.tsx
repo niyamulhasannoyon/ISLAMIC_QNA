@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { AnalyticsTracker } from "@/components/AnalyticsTracker";
 import { getSiteUrl } from "@/lib/utils";
 
 const siteUrl = getSiteUrl();
@@ -138,7 +140,12 @@ export default function RootLayout({
         <script src="https://accounts.google.com/gsi/client" async defer />
       </head>
       <body className="min-h-screen bg-[#09090b] text-zinc-100 font-sans antialiased selection:bg-emerald-500/20 selection:text-emerald-200">
-        <LanguageProvider>{children}</LanguageProvider>
+        <LanguageProvider>
+          <Suspense fallback={null}>
+            <AnalyticsTracker />
+          </Suspense>
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );

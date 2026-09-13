@@ -76,7 +76,7 @@ export async function extractSemanticFiqhIntent(rawQuery: string): Promise<Seman
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: 'open-mistral-7b',
+        model: 'open-mistral-nemo',
         messages: [
           {
             role: 'system',
@@ -91,6 +91,7 @@ Output ONLY a compact JSON object with:
   "fiqhConcepts": ["3-5 authentic fiqh concepts and spelling variations across Bangladeshi Islamic journals"]
 }
 Examples:
+- 'protom rakaat sese uthe daranor age boithok e bosa' -> {"canonicalBengali": "প্রথম রাকাত শেষে দাঁড়ানোর পূর্বে বৈঠক বা বসার বিধান", "coreSubject": "সালাত", "coreAspect": "জালসায়ে ইস্তিরাহাত", "essentialKeywords": ["প্রথম রাকাত", "বৈঠক", "দাঁড়ানোর পূর্বে"], "fiqhConcepts": ["জালসায়ে ইস্তিরাহাত", "প্রথম রাকাতের বৈঠক", "ইস্তিরাহাত", "সিজদা থেকে দাঁড়ানোর পূর্বে বৈঠক"]}
 - 'dui sijdar por bosa' -> {"canonicalBengali": "দুই সিজদার পর বৈঠক বা বসার বিধান", "coreSubject": "সিজদা", "coreAspect": "বসা", "essentialKeywords": ["সিজদা", "বসা"], "fiqhConcepts": ["জালসায়ে ইস্তিরাহাত", "দুই সিজদার মধ্যবর্তী বৈঠক", "সিজদার পর বসা", "বৈঠক"]}
 - 'roza obosthay injection neya jabe ki' -> {"canonicalBengali": "রোযা অবস্থায় ইনজেকশন নেওয়ার বিধান", "coreSubject": "রোজা", "coreAspect": "ইনজেকশন", "essentialKeywords": ["রোজা", "ইনজেকশন"], "fiqhConcepts": ["রোযা ভঙ্গ", "ইনসুলিন", "টিকা", "রোযা নষ্ট"]}
 - 'cheler akika koyta chagol' -> {"canonicalBengali": "ছেলে সন্তানের আকীকায় ছাগলের সংখ্যা", "coreSubject": "আকীকা", "coreAspect": "ছাগল", "essentialKeywords": ["আকীকা", "ছাগল", "পুত্র"], "fiqhConcepts": ["আক্বীক্বা", "পশুর সংখ্যা", "পুত্র সন্তান", "দুটি ছাগল"]}

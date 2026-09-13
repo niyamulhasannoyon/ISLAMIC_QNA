@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { SearchResultItem } from "@/types/fatwa";
 import { formatDate, cn, createFatwaSlug } from "@/lib/utils";
@@ -21,8 +22,13 @@ interface FatwaModalProps {
 }
 
 export function FatwaModal({ item, onClose }: FatwaModalProps) {
+  const [mounted, setMounted] = useState(false);
   const { t, lang, isRTL } = useLanguage();
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Close on Escape
   useEffect(() => {
@@ -37,7 +43,7 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
 
   // Lock scroll when open
   useEffect(() => {
-    if (item) {
+    if (item && mounted) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "unset";
@@ -45,9 +51,9 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [item]);
+  }, [item, mounted]);
 
-  if (!item) return null;
+  if (!item || !mounted) return null;
 
   const fatwaSlug = createFatwaSlug(item.title, item.id);
 
@@ -65,11 +71,11 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
   const displayDate = item.published_date || item.created_at;
   const fullHash = item.sha256_hash || "";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-5 md:p-8 overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-5 md:p-8 overflow-hidden font-bengali">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
@@ -247,6 +253,8 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
           </a>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+

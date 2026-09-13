@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, ShieldCheck } from "lucide-react";
 import { UserSession } from "@/types/user";
 
@@ -12,6 +13,7 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: AuthModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [tab, setTab] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -19,6 +21,10 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -32,7 +38,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
 
   // Lock body scroll when modal is active
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && mounted) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "unset";
@@ -40,7 +46,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [isOpen]);
+  }, [isOpen, mounted]);
 
   // Close on Escape key
   useEffect(() => {
@@ -53,7 +59,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,11 +97,9 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
     setError("");
 
     try {
-      // Check if Google GIS Client API is loaded or prompt Google Sign In
       let googleCredential = "";
 
       if (typeof window !== "undefined" && (window as any).google?.accounts?.id) {
-        // Trigger official Google One Tap / OAuth popup
         const google = (window as any).google;
         await new Promise<void>((resolve) => {
           google.accounts.id.initialize({
@@ -108,12 +112,10 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
             },
           });
           google.accounts.id.prompt();
-          // Fallback timeout if user closes GIS popup
-          setTimeout(resolve, 3000);
+          setTimeout(resolve, 1500);
         });
       }
 
-      // Perform Google Auth API call
       const res = await fetch("/api/v1/auth/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -144,16 +146,16 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden font-bengali">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto font-bengali">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity duration-200"
         onClick={onClose}
       />
 
       {/* Modal Box */}
-      <div className="relative w-full max-w-md bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-6 sm:p-8 z-10 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-md bg-white dark:bg-[#121215] border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xl p-6 sm:p-8 z-10 animate-in fade-in zoom-in-95 duration-200 my-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
@@ -269,7 +271,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="মুহাম্মাদ আব্দুল্লাহ"
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-zinc-900 dark:text-zinc-100"
                 />
               </div>
             </div>
@@ -287,7 +289,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-zinc-900 dark:text-zinc-100"
               />
             </div>
           </div>
@@ -304,7 +306,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-zinc-900 dark:text-zinc-100"
               />
             </div>
           </div>
@@ -325,6 +327,8 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+
