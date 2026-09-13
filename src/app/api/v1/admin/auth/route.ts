@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminCredentials, setAdminSession, clearAdminSession, isAdminAuthenticated } from '@/lib/auth';
+import { getCurrentUserSession, clearUserSession } from '@/lib/userAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,12 +11,15 @@ export async function POST(req: NextRequest) {
 
     if (action === 'logout') {
       await clearAdminSession();
+      await clearUserSession();
       return NextResponse.json({ success: true, message: 'Logged out successfully' });
     }
 
     if (action === 'check') {
-      const authenticated = await isAdminAuthenticated();
-      return NextResponse.json({ authenticated });
+      const adminAuth = await isAdminAuthenticated();
+      const userSession = await getCurrentUserSession();
+      const authenticated = adminAuth || userSession?.role === 'admin';
+      return NextResponse.json({ authenticated, user: userSession });
     }
 
     // Default: Login action

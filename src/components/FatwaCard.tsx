@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SearchResultItem } from "@/types/fatwa";
 import { formatDate, cn } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
+import { buildCacheKey, saveScrollPosition } from "@/lib/searchCache";
 import {
   ExternalLink,
   Copy,
@@ -25,6 +26,19 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
   const { t, lang } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const handleLinkClick = () => {
+    if (typeof window === "undefined") return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const cacheKey = buildCacheKey({
+      q: urlParams.get("q") || "",
+      source: urlParams.get("source") || "All",
+      category: urlParams.get("category") || "All",
+      scholar: urlParams.get("scholar") || "All",
+      page: urlParams.get("page") || "1",
+    });
+    saveScrollPosition(cacheKey, window.scrollY);
+  };
 
   const handleCopyLink = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -137,6 +151,7 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
       <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-zinc-900 dark:text-zinc-100 font-bengali-serif tracking-tight leading-snug mb-1.5 sm:mb-2">
         <Link
           href={`/fatwa/${item.id}`}
+          onClick={handleLinkClick}
           className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors block"
           dangerouslySetInnerHTML={{ __html: item.titleSnippet || item.title }}
         />
@@ -229,6 +244,7 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
 
           <Link
             href={`/fatwa/${item.id}`}
+            onClick={handleLinkClick}
             className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 font-bengali"
             title="আলাদা পেজে সম্পূর্ণ ফতোয়া পড়ুন"
           >

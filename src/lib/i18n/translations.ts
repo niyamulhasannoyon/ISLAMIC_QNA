@@ -71,6 +71,14 @@ export interface TranslationSchema {
     archiveNotice: string;
     apiInfo: string;
   };
+  notFound: {
+    code: string;
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+    backHome: string;
+    popularTopicsTitle: string;
+  };
 }
 
 export const translations: Record<Language, TranslationSchema> = {
@@ -159,6 +167,14 @@ export const translations: Record<Language, TranslationSchema> = {
       archiveNotice: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ • আল-ইতিসাম, আত-তাহরীক ও আলকাউসার সমন্বিত",
       apiInfo: "SHA-256 সুরক্ষিত ও যাচাইকৃত",
     },
+    notFound: {
+      code: "৪০৪",
+      title: "পৃষ্ঠাটি পাওয়া যায়নি",
+      subtitle: "আপনি যে ফতোয়া বা পৃষ্ঠাটি খুঁজছেন তা স্থানান্তরিত হয়েছে অথবা ইউআরএল (URL) টি সঠিক নয়।",
+      searchPlaceholder: "সহীহ ফতোয়া, প্রশ্ন বা বিষয়বস্তু খুঁজুন...",
+      backHome: "মূল পাতায় ফিরে যান",
+      popularTopicsTitle: "অথবা জনপ্রিয় বিষয়সমূহ দেখুন:",
+    },
   },
 
   en: {
@@ -246,6 +262,14 @@ export const translations: Record<Language, TranslationSchema> = {
       archiveNotice: "Islamic Fatwa & Research Archive • Aggregating Al-I'tisam, At-Tahreek & Al-Kawsar",
       apiInfo: "SHA-256 Verified & Idempotent",
     },
+    notFound: {
+      code: "404",
+      title: "Page Not Found",
+      subtitle: "The page or fatwa you are looking for has been moved or the URL is incorrect.",
+      searchPlaceholder: "Search authentic fatwas, questions or topics...",
+      backHome: "Back to Home",
+      popularTopicsTitle: "Or explore popular topics:",
+    },
   },
 
   ar: {
@@ -332,6 +356,14 @@ export const translations: Record<Language, TranslationSchema> = {
     footer: {
       archiveNotice: "أرشيف الفتاوى والبحوث الإسلامية • جمع مجلات الاعتصام والتحريك والكوثر",
       apiInfo: "موثق بتجزئة SHA-256",
+    },
+    notFound: {
+      code: "٤٠٤",
+      title: "الصفحة غير موجودة",
+      subtitle: "الصفحة أو الفتوى التي تبحث عنها غير موجودة أو تم نقلها أو أن الرابط غير صحيح.",
+      searchPlaceholder: "ابحث في الفتاوى الموثوقة والمسائل الشرعية...",
+      backHome: "العودة إلى الصفحة الرئيسية",
+      popularTopicsTitle: "أو تصفح أبرز المواضيع الشائعة:",
     },
   },
 };

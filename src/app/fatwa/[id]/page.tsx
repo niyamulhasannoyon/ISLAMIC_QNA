@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getFatwaById, getRelatedFatwas } from "@/lib/db";
 import { formatDate, cn, getSiteUrl } from "@/lib/utils";
 import { Header } from "@/components/Header";
+import { FatwaDetailHeader } from "@/components/FatwaDetailHeader";
 import { ShareButtons } from "@/components/ShareButtons";
 import { FatwaQA } from "@/types/fatwa";
 import {
@@ -261,39 +262,7 @@ export default async function FatwaPage({ params }: Props) {
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-3.5 sm:px-6 py-4 sm:py-8">
         {/* Navigation & Breadcrumb Bar */}
-        <nav
-          aria-label="Breadcrumb"
-          className="mb-4 sm:mb-6 flex items-center justify-between flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400"
-        >
-          <div className="flex items-center gap-1.5 flex-wrap font-bengali">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors font-medium"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>হোম</span>
-            </Link>
-            <ChevronRight className="h-3 w-3 text-zinc-400" />
-            <Link
-              href={`/?category=${encodeURIComponent(fatwa.category)}`}
-              className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors inline-flex items-center gap-1"
-            >
-              <Folder className="h-3 w-3 text-zinc-400" />
-              <span>{fatwa.category}</span>
-            </Link>
-            <ChevronRight className="h-3 w-3 text-zinc-400" />
-            <span className="text-zinc-700 dark:text-zinc-300 font-medium truncate max-w-[150px] sm:max-w-xs">
-              {fatwa.title}
-            </span>
-          </div>
-
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors font-bengali"
-          >
-            <span>অনুসন্ধান</span>
-          </Link>
-        </nav>
+        <FatwaDetailHeader category={fatwa.category} title={fatwa.title} />
 
         {/* Primary Article Container */}
         <article className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/90 rounded-xl sm:rounded-2xl p-4 sm:p-8 shadow-sm">

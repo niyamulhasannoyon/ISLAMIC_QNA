@@ -10,28 +10,64 @@ import { SkeletonLoader } from "@/components/SkeletonLoader";
 import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/context/LanguageContext";
 import { SearchResponse, SearchResultItem, FacetCount } from "@/types/fatwa";
-import { ChevronLeft, ChevronRight, ShieldCheck, Database } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import {
+  buildCacheKey,
+  getCachedSearch,
+  setCachedSearch,
+  getSavedScrollPosition,
+  clearSavedScrollPosition,
+} from "@/lib/searchCache";
+
+function getInitialParams() {
+  if (typeof window === "undefined") {
+    return { q: "", source: "All", category: "All", scholar: "All", page: 1 };
+  }
+  const urlParams = new URLSearchParams(window.location.search);
+  return {
+    q: urlParams.get("q") || "",
+    source: urlParams.get("source") || "All",
+    category: urlParams.get("category") || "All",
+    scholar: urlParams.get("scholar") || "All",
+    page: parseInt(urlParams.get("page") || "1", 10) || 1,
+  };
+}
 
 export default function Home() {
   const { t, isRTL, lang } = useLanguage();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [selectedSource, setSelectedSource] = useState("All");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedScholar, setSelectedScholar] = useState("All");
-  const [page, setPage] = useState(1);
 
-  const [results, setResults] = useState<SearchResultItem[]>([]);
-  const [totalResults, setTotalResults] = useState<number | undefined>(undefined);
-  const [totalPages, setTotalPages] = useState(1);
-  const [tookMs, setTookMs] = useState<number | undefined>(undefined);
-  const [sourceFacets, setSourceFacets] = useState<FacetCount[]>([]);
-  const [categoryFacets, setCategoryFacets] = useState<FacetCount[]>([]);
-  const [scholarFacets, setScholarFacets] = useState<FacetCount[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Parse initial parameters synchronously from window.location on client
+  const [initialParams] = useState(() => getInitialParams());
+
+  const [query, setQuery] = useState(initialParams.q);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialParams.q);
+  const [selectedSource, setSelectedSource] = useState(initialParams.source);
+  const [selectedCategory, setSelectedCategory] = useState(initialParams.category);
+  const [selectedScholar, setSelectedScholar] = useState(initialParams.scholar);
+  const [page, setPage] = useState(initialParams.page);
+
+  // Synchronous cache lookup for instant 0ms render on back navigation
+  const initialCacheKey = buildCacheKey({
+    q: initialParams.q,
+    source: initialParams.source,
+    category: initialParams.category,
+    scholar: initialParams.scholar,
+    page: initialParams.page,
+  });
+  const cachedData = typeof window !== "undefined" ? getCachedSearch(initialCacheKey) : null;
+
+  const [results, setResults] = useState<SearchResultItem[]>(cachedData?.results || []);
+  const [totalResults, setTotalResults] = useState<number | undefined>(cachedData?.total);
+  const [totalPages, setTotalPages] = useState<number>(cachedData?.totalPages || 1);
+  const [tookMs, setTookMs] = useState<number | undefined>(cachedData?.tookMs);
+  const [sourceFacets, setSourceFacets] = useState<FacetCount[]>(cachedData?.facets?.sources || []);
+  const [categoryFacets, setCategoryFacets] = useState<FacetCount[]>(cachedData?.facets?.categories || []);
+  const [scholarFacets, setScholarFacets] = useState<FacetCount[]>(cachedData?.facets?.scholars || []);
+  const [isLoading, setIsLoading] = useState<boolean>(!cachedData);
 
   const [activeModalItem, setActiveModalItem] = useState<SearchResultItem | null>(null);
   const isInitialMount = useRef(true);
+  const hasRestoredScroll = useRef(false);
 
   // Fast client-side debouncing (180ms)
   useEffect(() => {
@@ -43,9 +79,32 @@ export default function Home() {
     return () => clearTimeout(handler);
   }, [query]);
 
-  // Execute Search API call
+  // Execute Search API call with Stale-While-Revalidate pattern
   const performSearch = useCallback(async () => {
-    setIsLoading(true);
+    const currentCacheKey = buildCacheKey({
+      q: debouncedQuery,
+      source: selectedSource,
+      category: selectedCategory,
+      scholar: selectedScholar,
+      page,
+    });
+
+    const cached = getCachedSearch(currentCacheKey);
+    if (cached) {
+      setResults(cached.results || []);
+      setTotalResults(cached.total);
+      setTotalPages(cached.totalPages || 1);
+      setTookMs(cached.tookMs);
+      if (cached.facets) {
+        setSourceFacets(cached.facets.sources || []);
+        setCategoryFacets(cached.facets.categories || []);
+        setScholarFacets(cached.facets.scholars || []);
+      }
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
+
     try {
       const params = new URLSearchParams();
       if (debouncedQuery) params.set("q", debouncedQuery);
@@ -68,6 +127,9 @@ export default function Home() {
         setCategoryFacets(data.facets.categories || []);
         setScholarFacets(data.facets.scholars || []);
       }
+
+      // Update cache
+      setCachedSearch(currentCacheKey, data);
     } catch (err) {
       console.error("Search error:", err);
     } finally {
@@ -79,22 +141,50 @@ export default function Home() {
     performSearch();
   }, [performSearch]);
 
-  // Check URL query parameters for deep linking (?id=... or ?q=...)
+  // Restore saved scroll position after cached/fresh results render
+  useEffect(() => {
+    if (typeof window === "undefined" || hasRestoredScroll.current) return;
+    const currentCacheKey = buildCacheKey({
+      q: debouncedQuery,
+      source: selectedSource,
+      category: selectedCategory,
+      scholar: selectedScholar,
+      page,
+    });
+    const savedY = getSavedScrollPosition(currentCacheKey);
+    if (savedY !== null && results.length > 0) {
+      hasRestoredScroll.current = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: savedY, behavior: "instant" });
+          clearSavedScrollPosition();
+        });
+      });
+    }
+  }, [debouncedQuery, selectedSource, selectedCategory, selectedScholar, page, results.length]);
+
+  // Handle browser popstate events (Back / Forward buttons)
+  useEffect(() => {
+    const handlePopState = () => {
+      const p = getInitialParams();
+      setQuery(p.q);
+      setDebouncedQuery(p.q);
+      setSelectedSource(p.source);
+      setSelectedCategory(p.category);
+      setSelectedScholar(p.scholar);
+      setPage(p.page);
+      hasRestoredScroll.current = false;
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Check URL query parameters for deep linking modal (?id=...)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const urlParams = new URLSearchParams(window.location.search);
     const initialId = urlParams.get("id");
-    const initialQ = urlParams.get("q");
-    const initialSource = urlParams.get("source");
-
-    if (initialSource && isInitialMount.current) {
-      setSelectedSource(initialSource);
-    }
-
-    if (initialQ && isInitialMount.current) {
-      setQuery(initialQ);
-      setDebouncedQuery(initialQ);
-    }
 
     if (initialId) {
       fetch(`/api/v1/fatwa/${initialId}`)
@@ -111,13 +201,14 @@ export default function Home() {
         })
         .catch((e) => console.error("Could not fetch deep linked item:", e));
     }
-
-    isInitialMount.current = false;
   }, []);
 
-  // Update browser URL query without reloading
+  // Sync browser URL query without reloading
   useEffect(() => {
-    if (isInitialMount.current) return;
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     const url = new URL(window.location.href);
     if (debouncedQuery) {
       url.searchParams.set("q", debouncedQuery);
@@ -129,8 +220,23 @@ export default function Home() {
     } else {
       url.searchParams.delete("source");
     }
+    if (selectedCategory !== "All") {
+      url.searchParams.set("category", selectedCategory);
+    } else {
+      url.searchParams.delete("category");
+    }
+    if (selectedScholar !== "All") {
+      url.searchParams.set("scholar", selectedScholar);
+    } else {
+      url.searchParams.delete("scholar");
+    }
+    if (page > 1) {
+      url.searchParams.set("page", page.toString());
+    } else {
+      url.searchParams.delete("page");
+    }
     window.history.replaceState({}, "", url.toString());
-  }, [debouncedQuery, selectedSource]);
+  }, [debouncedQuery, selectedSource, selectedCategory, selectedScholar, page]);
 
   const handleSourceChange = (src: string) => {
     setSelectedSource(src);

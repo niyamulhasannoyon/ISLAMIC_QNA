@@ -112,6 +112,26 @@ export function getDb(): Database.Database {
       INSERT INTO fatwas_fts(id, title, question, answer, category, source, scholar)
       VALUES (new.id, new.title, new.question, new.answer, new.category, new.source, new.scholar);
     END;
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      picture TEXT NOT NULL DEFAULT '',
+      password_hash TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'user',
+      provider TEXT NOT NULL DEFAULT 'credentials',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      fatwa_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, fatwa_id)
+    );
   `);
 
   // Handle auto-migration for existing SQLite tables
@@ -651,4 +671,68 @@ export function getRelatedFatwas(
 
   return rows;
 }
+
+import { User } from '@/types/user';
+
+export function findUserByEmail(email: string): User | null {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim()) as User | undefined;
+  return row || null;
+}
+
+export function findUserById(id: string): User | null {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
+  return row || null;
+}
+
+export function createOrUpdateUser(userData: {
+  email: string;
+  name: string;
+  picture?: string;
+  password_hash?: string;
+  role?: 'user' | 'admin';
+  provider?: 'credentials' | 'google';
+}): User {
+  const db = getDb();
+  const existing = findUserByEmail(userData.email);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    db.prepare(`
+      UPDATE users 
+      SET name = ?, picture = COALESCE(?, picture), password_hash = COALESCE(?, password_hash), 
+          role = ?, provider = ?, updated_at = ?
+      WHERE email = ?
+    `).run(
+      userData.name,
+      userData.picture || existing.picture || '',
+      userData.password_hash || existing.password_hash || '',
+      userData.role || existing.role || 'user',
+      userData.provider || existing.provider || 'credentials',
+      now,
+      userData.email.toLowerCase().trim()
+    );
+    return findUserByEmail(userData.email)!;
+  }
+
+  const userId = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO users (id, email, name, picture, password_hash, role, provider, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    userId,
+    userData.email.toLowerCase().trim(),
+    userData.name,
+    userData.picture || '',
+    userData.password_hash || '',
+    userData.role || 'user',
+    userData.provider || 'credentials',
+    now,
+    now
+  );
+
+  return findUserById(userId)!;
+}
+
 
