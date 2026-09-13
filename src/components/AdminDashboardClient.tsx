@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createFatwaSlug } from '@/lib/utils';
 import {
   Database,
   BarChart3,
@@ -652,7 +653,7 @@ export function AdminDashboardClient({
                           <span className="text-[11px] text-zinc-500 truncate">{item.category}</span>
                         </div>
                         <Link
-                          href={`/fatwa/${item.fatwa_id}`}
+                          href={`/fatwa/${createFatwaSlug(item.title, item.fatwa_id)}`}
                           target="_blank"
                           className="font-medium text-zinc-900 dark:text-zinc-100 hover:text-emerald-600 dark:hover:text-emerald-400 truncate block transition-colors"
                         >

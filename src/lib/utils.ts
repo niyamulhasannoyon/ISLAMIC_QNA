@@ -58,12 +58,24 @@ export function createFatwaSlug(title: string, id: string): string {
   const cleanTitle = title
     .toLowerCase()
     .replace(/<[^>]*>/g, "")
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-  const truncated = cleanTitle.slice(0, 75).replace(/-$/, "");
+  if (!cleanTitle) return id;
+
+  let truncated = cleanTitle;
+  if (cleanTitle.length > 75) {
+    const lastHyphen = cleanTitle.lastIndexOf("-", 75);
+    if (lastHyphen > 25) {
+      truncated = cleanTitle.slice(0, lastHyphen);
+    } else {
+      truncated = cleanTitle.slice(0, 75);
+    }
+  }
+
+  truncated = truncated.replace(/-+$/, "");
 
   return truncated ? `${truncated}-${shortId}` : id;
 }
@@ -83,11 +95,11 @@ export function extractIdFromSlug(rawInput: string): string {
     return decoded;
   }
 
-  // Extract last hyphenated token (e.g. 8-char short hex ID)
+  // Extract last hyphenated token (e.g. short hex ID or alphanumeric ID suffix)
   const lastHyphenIdx = decoded.lastIndexOf("-");
   if (lastHyphenIdx !== -1) {
     const candidate = decoded.slice(lastHyphenIdx + 1);
-    if (/^[a-f0-9]{8,32}$/i.test(candidate)) {
+    if (/^[a-f0-9]{4,36}$/i.test(candidate)) {
       return candidate;
     }
   }
