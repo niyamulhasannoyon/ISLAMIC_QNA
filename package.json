@@ -9,6 +9,7 @@
     "lint": "next lint",
     "seed": "tsx src/scripts/seed.ts",
     "import:json": "tsx src/scripts/import-json.ts",
+    "sync:live": "python3 scraper/incremental_scraper.py",
     "test": "tsx src/scripts/test-search.ts && tsx src/scripts/test-api.ts",
     "test:search": "tsx src/scripts/test-search.ts",
     "test:api": "tsx src/scripts/test-api.ts"
