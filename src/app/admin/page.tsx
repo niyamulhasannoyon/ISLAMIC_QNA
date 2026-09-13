@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { isAdminAuthenticated } from '@/lib/auth';
 import { getFatwaCount, getFacets } from '@/lib/db';
 import { Header } from '@/components/Header';
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default async function AdminPage() {
   const authenticated = await isAdminAuthenticated();
   if (!authenticated) {
-    redirect('/admin/login');
+    notFound();
   }
 
   const count = getFatwaCount();

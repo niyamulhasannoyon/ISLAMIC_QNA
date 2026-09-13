@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     if (!googleProfile) {
       return NextResponse.json(
-        { error: "Google প্রমাণীকরণ ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।" },
+        { error: "Google প্রমাণীকরণ ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন。" },
         { status: 400 }
       );
     }
@@ -36,16 +36,7 @@ export async function POST(req: NextRequest) {
     const emailLower = googleProfile.email.toLowerCase().trim();
     const isAdminAuthorized = isAllowedAdminEmail(emailLower);
 
-    // If user attempts Admin login, but email is NOT authorized, reject access
-    if (isAdminLogin && !isAdminAuthorized) {
-      return NextResponse.json(
-        {
-          error: `দুঃখিত, এই ইমেইল (${googleProfile.email}) দিয়ে এডমিন প্যানেলে প্রবেশের অনুমতি নেই। কেবল niyamulhasanbd@gmail.com এবং niyamulhasan1089@gmail.com ইমেইল দুটি দিয়ে এডমিন প্যানেলে প্রবেশ করা সম্ভব।`,
-        },
-        { status: 403 }
-      );
-    }
-
+    // Only allow admin role if email is explicitly authorized
     const role = isAdminAuthorized ? "admin" : "user";
 
     // Create or update Google user profile in SQLite
@@ -75,6 +66,8 @@ export async function POST(req: NextRequest) {
         role: user.role,
         provider: user.provider,
       },
+      redirect: user.role === "admin" ? "/admin" : "/",
+      isUnauthorizedAdmin: isAdminLogin && !isAdminAuthorized,
     });
   } catch (error: any) {
     return NextResponse.json(

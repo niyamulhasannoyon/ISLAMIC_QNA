@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
-import { Lock, ShieldCheck, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Lock, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function AdminLoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -53,11 +53,17 @@ export default function AdminLoginPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'গুগল এডমিন সাইন-ইন ব্যর্থ হয়েছে');
+        throw new Error(data.error || 'গুগল সাইন-ইন সম্পন্ন করা যায়নি।');
       }
 
-      router.push('/admin');
-      router.refresh();
+      // If user is authorized admin, redirect to /admin; otherwise redirect to home page /
+      if (data.user && data.user.role === 'admin') {
+        router.push('/admin');
+        router.refresh();
+      } else {
+        router.push('/');
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err?.message || 'গুগল সাইন-ইন সম্পন্ন করা যায়নি।');
     } finally {
@@ -72,7 +78,7 @@ export default function AdminLoginPage() {
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="max-w-md w-full bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-xl">
           {/* Header */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 mb-3.5 shadow-inner">
               <Lock className="h-7 w-7" />
             </div>
@@ -91,21 +97,6 @@ export default function AdminLoginPage() {
               <span className="leading-relaxed">{error}</span>
             </div>
           )}
-
-          {/* Authorization Policy Banner */}
-          <div className="mb-6 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 text-xs space-y-1">
-            <div className="flex items-center gap-1.5 font-bold">
-              <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>নিরাপত্তা নীতি ও অনুমতি:</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400 pl-5">
-              কেবলমাত্র নির্দিষ্ট অনুমোদনপ্রাপ্ত গুগল ইমেইল দিয়ে এডমিন প্যানেলে প্রবেশ করা সম্ভব:
-            </p>
-            <div className="pl-5 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-200">
-              • niyamulhasanbd@gmail.com<br />
-              • niyamulhasan1089@gmail.com
-            </div>
-          </div>
 
           {/* Google Sign In Button */}
           <button
