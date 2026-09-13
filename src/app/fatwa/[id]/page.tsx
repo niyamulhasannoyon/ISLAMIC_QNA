@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFatwaById, getRelatedFatwas } from "@/lib/db";
-import { formatDate, cn, getSiteUrl } from "@/lib/utils";
+import { formatDate, cn, getSiteUrl, createFatwaSlug } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { FatwaDetailHeader } from "@/components/FatwaDetailHeader";
 import { ShareButtons } from "@/components/ShareButtons";
@@ -100,7 +100,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     160
   );
 
-  const canonicalUrl = `${siteUrl}/fatwa/${fatwa.id}`;
+  const fatwaSlug = createFatwaSlug(fatwa.title, fatwa.id);
+  const canonicalUrl = `${siteUrl}/fatwa/${fatwaSlug}`;
   const keywords = Array.from(
     new Set([
       fatwa.title,
@@ -173,7 +174,8 @@ export default async function FatwaPage({ params }: Props) {
 
   const siteUrl = getSiteUrl();
   const relatedFatwas = getRelatedFatwas(fatwa.category, fatwa.id, 5);
-  const canonicalUrl = `${siteUrl}/fatwa/${fatwa.id}`;
+  const fatwaSlug = createFatwaSlug(fatwa.title, fatwa.id);
+  const canonicalUrl = `${siteUrl}/fatwa/${fatwaSlug}`;
 
   const isAtTahreek = fatwa.source.toLowerCase().includes("tahreek");
   const isAlItisam = fatwa.source.toLowerCase().includes("itisam");
@@ -419,34 +421,37 @@ export default async function FatwaPage({ params }: Props) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {relatedFatwas.map((rf) => (
-                <Link
-                  key={rf.id}
-                  href={`/fatwa/${rf.id}`}
-                  className="block p-4 rounded-xl bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/80 hover:border-emerald-500/50 dark:hover:border-emerald-500/40 hover:shadow-md transition-all group"
-                >
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-400 mb-1.5 font-bengali">
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                      {rf.source === "at-tahreek"
-                        ? "আত-তাহরীক"
-                        : rf.source === "al-kawsar"
-                        ? "আলকাউসার"
-                        : "আল-ইতিসাম"}
-                    </span>
-                    <span>&bull;</span>
-                    <span>{rf.category}</span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-bengali group-hover:text-emerald-600 dark:group-hover:text-emerald-400 line-clamp-2 transition-colors">
-                    {rf.title}
-                  </h3>
-                  {rf.scholar && (
-                    <p className="text-xs text-zinc-500 mt-2 flex items-center gap-1 font-bengali">
-                      <GraduationCap className="h-3 w-3 text-zinc-400" />
-                      <span>{rf.scholar}</span>
-                    </p>
-                  )}
-                </Link>
-              ))}
+              {relatedFatwas.map((rf) => {
+                const rfSlug = createFatwaSlug(rf.title, rf.id);
+                return (
+                  <Link
+                    key={rf.id}
+                    href={`/fatwa/${rfSlug}`}
+                    className="block p-4 rounded-xl bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/80 hover:border-emerald-500/50 dark:hover:border-emerald-500/40 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-2 text-[11px] text-zinc-400 mb-1.5 font-bengali">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {rf.source === "at-tahreek"
+                          ? "আত-তাহরীক"
+                          : rf.source === "al-kawsar"
+                          ? "আলকাউসার"
+                          : "আল-ইতিসাম"}
+                      </span>
+                      <span>&bull;</span>
+                      <span>{rf.category}</span>
+                    </div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-bengali group-hover:text-emerald-600 dark:group-hover:text-emerald-400 line-clamp-2 transition-colors">
+                      {rf.title}
+                    </h3>
+                    {rf.scholar && (
+                      <p className="text-xs text-zinc-500 mt-2 flex items-center gap-1 font-bengali">
+                        <GraduationCap className="h-3 w-3 text-zinc-400" />
+                        <span>{rf.scholar}</span>
+                      </p>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           </section>
         )}

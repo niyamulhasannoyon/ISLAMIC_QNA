@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { SearchResultItem } from "@/types/fatwa";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, createFatwaSlug } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
 import {
   X,
@@ -49,8 +49,10 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
 
   if (!item) return null;
 
+  const fatwaSlug = createFatwaSlug(item.title, item.id);
+
   const handleCopyLink = () => {
-    const permalink = `${window.location.origin}/fatwa/${item.id}`;
+    const permalink = `${window.location.origin}/fatwa/${fatwaSlug}`;
     navigator.clipboard.writeText(permalink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -134,7 +136,7 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
 
           <div className="flex items-center gap-1.5 shrink-0">
             <Link
-              href={`/fatwa/${item.id}`}
+              href={`/fatwa/${fatwaSlug}`}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors font-bengali"
               title="আলাদা পেজে সম্পূর্ণ ফতোয়া পড়ুন"
             >

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { SearchResultItem } from "@/types/fatwa";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, createFatwaSlug } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
 import { buildCacheKey, saveScrollPosition } from "@/lib/searchCache";
 import {
@@ -27,6 +27,8 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const fatwaSlug = createFatwaSlug(item.title, item.id);
+
   const handleLinkClick = () => {
     if (typeof window === "undefined") return;
     const urlParams = new URLSearchParams(window.location.search);
@@ -42,7 +44,7 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
 
   const handleCopyLink = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const permalink = `${window.location.origin}/fatwa/${item.id}`;
+    const permalink = `${window.location.origin}/fatwa/${fatwaSlug}`;
     navigator.clipboard.writeText(permalink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -150,7 +152,7 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
       {/* Weighty Title Leading with font-semibold & crawlable link */}
       <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-zinc-900 dark:text-zinc-100 font-bengali-serif tracking-tight leading-snug mb-1.5 sm:mb-2">
         <Link
-          href={`/fatwa/${item.id}`}
+          href={`/fatwa/${fatwaSlug}`}
           onClick={handleLinkClick}
           className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors block"
           dangerouslySetInnerHTML={{ __html: item.titleSnippet || item.title }}
@@ -243,7 +245,7 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
           </button>
 
           <Link
-            href={`/fatwa/${item.id}`}
+            href={`/fatwa/${fatwaSlug}`}
             onClick={handleLinkClick}
             className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 font-bengali"
             title="আলাদা পেজে সম্পূর্ণ ফতোয়া পড়ুন"

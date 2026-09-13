@@ -1,6 +1,6 @@
 import { MetadataRoute } from "next";
 import { getFatwaCount, getFatwaMetadataList } from "@/lib/db";
-import { getSiteUrl } from "@/lib/utils";
+import { getSiteUrl, createFatwaSlug } from "@/lib/utils";
 
 const CHUNK_SIZE = 10000;
 const siteUrl = getSiteUrl();
@@ -30,7 +30,7 @@ export default async function sitemap({
     }
 
     return {
-      url: `${siteUrl}/fatwa/${f.id}`,
+      url: `${siteUrl}/fatwa/${createFatwaSlug(f.title, f.id)}`,
       lastModified: lastMod,
       changeFrequency: "weekly" as const,
       priority: 0.8,

@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { FatwaQA, FatwaSource, IngestItemInput, IngestResultItem, SearchFacets } from '@/types/fatwa';
 import { computeFatwaHash, normalizeText, hashToUuid } from './hash';
+import { extractIdFromSlug } from './utils';
 
 // Singleton instance across hot reloads in Next.js
 declare global {
@@ -523,9 +524,9 @@ const LEGACY_ID_MAP: Record<string, string> = {
  */
 export function getFatwaById(rawId: string): FatwaQA | null {
   if (!rawId || typeof rawId !== 'string') return null;
-  const trimmedId = rawId.trim();
-  const targetId = LEGACY_ID_MAP[trimmedId] || trimmedId;
-  const cleanHex = targetId.replace(/[^a-f0-9]/gi, '').toLowerCase();
+  const decoded = decodeURIComponent(rawId).trim();
+  const targetId = LEGACY_ID_MAP[decoded] || decoded;
+  const extractedCandidate = extractIdFromSlug(targetId);
 
   const db = getDb();
   const stmts = getStatements(db);
@@ -533,19 +534,33 @@ export function getFatwaById(rawId: string): FatwaQA | null {
   // 1. Try exact primary key ID match
   let r = stmts.getById.get(targetId) as any;
 
-  // 2. If alias was resolved and differs, try original ID as well
-  if (!r && targetId !== trimmedId) {
-    r = stmts.getById.get(trimmedId) as any;
+  // 2. Try extracted candidate ID match (short ID suffix or UUID)
+  if (!r && extractedCandidate && extractedCandidate !== targetId) {
+    r = stmts.getById.get(extractedCandidate) as any;
+    if (!r) {
+      r = db.prepare("SELECT * FROM fatwas WHERE id LIKE ? || '%' LIMIT 1").get(extractedCandidate) as any;
+    }
   }
 
-  // 3. Try exact SHA-256 hash match
+  // 3. If alias was resolved and differs, try original ID as well
+  if (!r && targetId !== decoded) {
+    r = stmts.getById.get(decoded) as any;
+  }
+
+  // 4. Try exact SHA-256 hash match
   if (!r) {
     r = stmts.getByHash.get(targetId.toLowerCase()) as any;
   }
 
-  // 4. Try prefix match on SHA-256 hash (UUID hex representation)
-  if (!r && cleanHex.length >= 8) {
-    r = stmts.getByHashPrefix.get(cleanHex) as any;
+  // 5. Try prefix match on targetId / cleanHex
+  if (!r) {
+    const cleanHex = (extractedCandidate || targetId).replace(/[^a-f0-9]/gi, '').toLowerCase();
+    if (cleanHex.length >= 8) {
+      r = db.prepare("SELECT * FROM fatwas WHERE id LIKE ? || '%' LIMIT 1").get(cleanHex) as any;
+      if (!r) {
+        r = stmts.getByHashPrefix.get(cleanHex) as any;
+      }
+    }
   }
 
   if (!r) return null;
@@ -618,11 +633,11 @@ export function getFatwaCount(): number {
 export function getFatwaMetadataList(
   limit: number = 10000,
   offset: number = 0
-): Array<{ id: string; updated_at: string; published_date: string }> {
+): Array<{ id: string; title: string; updated_at: string; published_date: string }> {
   const db = getDb();
   const rows = db
-    .prepare('SELECT id, updated_at, published_date FROM fatwas ORDER BY id ASC LIMIT ? OFFSET ?')
-    .all(limit, offset) as Array<{ id: string; updated_at: string; published_date: string }>;
+    .prepare('SELECT id, title, updated_at, published_date FROM fatwas ORDER BY id ASC LIMIT ? OFFSET ?')
+    .all(limit, offset) as Array<{ id: string; title: string; updated_at: string; published_date: string }>;
   return rows;
 }
 
