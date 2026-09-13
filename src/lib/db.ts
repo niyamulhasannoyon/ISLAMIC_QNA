@@ -549,3 +549,73 @@ export function getFacets(): SearchFacets {
 
   return data;
 }
+
+/**
+ * Returns total number of fatwa entries in database.
+ */
+export function getFatwaCount(): number {
+  const db = getDb();
+  const row = db.prepare('SELECT count(*) as count FROM fatwas').get() as { count: number } | undefined;
+  return row?.count || 0;
+}
+
+/**
+ * Returns a lightweight list of IDs and timestamps for XML sitemaps.
+ */
+export function getFatwaMetadataList(
+  limit: number = 10000,
+  offset: number = 0
+): Array<{ id: string; updated_at: string; published_date: string }> {
+  const db = getDb();
+  const rows = db
+    .prepare('SELECT id, updated_at, published_date FROM fatwas ORDER BY id ASC LIMIT ? OFFSET ?')
+    .all(limit, offset) as Array<{ id: string; updated_at: string; published_date: string }>;
+  return rows;
+}
+
+/**
+ * Fetches related fatwas for internal crawlable link architecture.
+ */
+export function getRelatedFatwas(
+  category: string,
+  currentId: string,
+  limit: number = 5
+): Array<{
+  id: string;
+  title: string;
+  category: string;
+  source: FatwaSource;
+  scholar: string;
+  published_date: string;
+}> {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, title, category, source, scholar, published_date 
+       FROM fatwas 
+       WHERE category = ? AND id != ? 
+       ORDER BY published_date DESC 
+       LIMIT ?`
+    )
+    .all(category, currentId, limit) as any[];
+
+  if (rows.length < limit) {
+    const existingIds = [currentId, ...rows.map((r) => r.id)];
+    const placeholders = existingIds.map(() => '?').join(',');
+    const remaining = limit - rows.length;
+    const fallbacks = db
+      .prepare(
+        `SELECT id, title, category, source, scholar, published_date 
+         FROM fatwas 
+         WHERE id NOT IN (${placeholders}) 
+         ORDER BY published_date DESC 
+         LIMIT ?`
+      )
+      .all(...existingIds, remaining) as any[];
+
+    return [...rows, ...fallbacks];
+  }
+
+  return rows;
+}
+

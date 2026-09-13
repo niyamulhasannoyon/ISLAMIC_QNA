@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { SearchResultItem } from "@/types/fatwa";
 import { formatDate, cn } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
@@ -49,12 +50,12 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
   if (!item) return null;
 
   const handleCopyLink = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("id", item.id);
-    navigator.clipboard.writeText(url.toString());
+    const permalink = `${window.location.origin}/fatwa/${item.id}`;
+    navigator.clipboard.writeText(permalink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
 
   const isAtTahreek = item.source.toLowerCase().includes("tahreek");
   const isAlItisam = item.source.toLowerCase().includes("itisam");
@@ -129,6 +130,15 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link
+              href={`/fatwa/${item.id}`}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors font-bengali"
+              title="আলাদা পেজে সম্পূর্ণ ফতোয়া পড়ুন"
+            >
+              <span>পূর্ণাঙ্গ পৃষ্ঠা</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+
             <button
               onClick={handleCopyLink}
               title={t.cards.copyLink}
@@ -157,6 +167,7 @@ export function FatwaModal({ item, onClose }: FatwaModalProps) {
             </button>
           </div>
         </div>
+
 
         {/* Scrollable Editorial Body */}
         <div className="overflow-y-auto px-6 sm:px-8 py-6 space-y-6">

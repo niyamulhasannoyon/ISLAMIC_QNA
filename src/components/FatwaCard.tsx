@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { SearchResultItem } from "@/types/fatwa";
 import { formatDate, cn } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
@@ -27,12 +28,12 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
 
   const handleCopyLink = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = new URL(window.location.href);
-    url.searchParams.set("id", item.id);
-    navigator.clipboard.writeText(url.toString());
+    const permalink = `${window.location.origin}/fatwa/${item.id}`;
+    navigator.clipboard.writeText(permalink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
 
   const isAtTahreek = item.source.toLowerCase().includes("tahreek");
   const isAlItisam = item.source.toLowerCase().includes("itisam");
@@ -132,12 +133,15 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
         </div>
       </div>
 
-      {/* Weighty Title Leading with font-semibold */}
-      <h2
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="text-lg sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-emerald-700 dark:hover:text-emerald-400 font-bengali-serif tracking-tight leading-snug mb-2 transition-colors"
-        dangerouslySetInnerHTML={{ __html: item.titleSnippet || item.title }}
-      />
+      {/* Weighty Title Leading with font-semibold & crawlable link */}
+      <h2 className="text-lg sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100 font-bengali-serif tracking-tight leading-snug mb-2">
+        <Link
+          href={`/fatwa/${item.id}`}
+          className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors block"
+          dangerouslySetInnerHTML={{ __html: item.titleSnippet || item.title }}
+        />
+      </h2>
+
 
       {/* Contextual Snippet with search-term highlighting (collapsed state) */}
       {!isExpanded && (
@@ -202,25 +206,36 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
         </div>
       )}
 
-      {/* Accordion Expand / Collapse Control */}
+      {/* Accordion Expand / Collapse Control & Direct Dedicated Page Link */}
       <div className="mt-3.5 pt-2.5 flex items-center justify-between border-t border-zinc-100/80 dark:border-zinc-800/40">
-        <button
-          type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 inline-flex items-center gap-1 transition-colors"
-        >
-          {isExpanded ? (
-            <>
-              <span>{t.cards.collapse}</span>
-              <ChevronUp className="h-3.5 w-3.5" />
-            </>
-          ) : (
-            <>
-              <span>{t.cards.readFull}</span>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 inline-flex items-center gap-1 transition-colors"
+          >
+            {isExpanded ? (
+              <>
+                <span>{t.cards.collapse}</span>
+                <ChevronUp className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                <span>{t.cards.readFull}</span>
+                <ChevronDown className="h-3.5 w-3.5" />
+              </>
+            )}
+          </button>
+
+          <Link
+            href={`/fatwa/${item.id}`}
+            className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 font-bengali"
+            title="আলাদা পেজে সম্পূর্ণ ফতোয়া পড়ুন"
+          >
+            <span>আলাদা পাতায় পড়ুন</span>
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
 
         {!isExpanded && (
           <button
@@ -233,6 +248,7 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
           </button>
         )}
       </div>
+
     </article>
   );
 }
