@@ -1,6 +1,7 @@
 import { batchUpsertFatwas } from '../lib/db';
 import { computeFatwaHash } from '../lib/hash';
 import { IngestItemInput, FatwaSource } from '../types/fatwa';
+import { runImport } from './import-json';
 
 const INITIAL_FATWAS: Array<Omit<IngestItemInput, 'sha256_hash' | 'hash'> & { source: FatwaSource; scholar: string; published_date: string }> = [
   {
@@ -101,7 +102,7 @@ const INITIAL_FATWAS: Array<Omit<IngestItemInput, 'sha256_hash' | 'hash'> & { so
   },
 ];
 
-function seed() {
+async function seed() {
   console.log('Seeding SQLite database with authentic Fatwa records...');
   const items: IngestItemInput[] = INITIAL_FATWAS.map((item) => {
     const sha256_hash = computeFatwaHash({
@@ -117,7 +118,10 @@ function seed() {
 
   const res = batchUpsertFatwas(items);
   console.log('Seed Results:', res);
-  console.log(`Database seeded successfully! (Total: ${res.total}, Inserted: ${res.inserted}, Updated: ${res.updated}, Skipped: ${res.skipped})`);
+  console.log(`Database initial seed complete! (Total: ${res.total}, Inserted: ${res.inserted}, Updated: ${res.updated}, Skipped: ${res.skipped})`);
+
+  console.log('\nChecking for external JSON files in data/ directory...');
+  await runImport();
 }
 
 seed();
