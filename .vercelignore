@@ -1,0 +1,5 @@
+# Data files
+data/
+scraper/
+*.tsbuildinfo
+*.log
