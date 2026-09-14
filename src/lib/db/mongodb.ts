@@ -2,6 +2,7 @@ import { MongoClient, Db } from 'mongodb';
 import { User } from '@/types/user';
 import { FatwaQA, IngestItemInput, IngestResultItem, SearchFacets, FatwaSource } from '@/types/fatwa';
 import { computeFatwaHash, hashToUuid, normalizeText } from '../hash';
+import { extractIdFromSlug } from '@/lib/utils';
 
 const uri = process.env.MONGODB_URI;
 
@@ -177,24 +178,47 @@ function mapMongoFatwaDoc(doc: any): FatwaQA {
   };
 }
 
-export async function getFatwaByIdMongo(idOrHash: string): Promise<FatwaQA | null> {
+export async function getFatwaByIdMongo(idOrSlug: string): Promise<FatwaQA | null> {
+  if (!idOrSlug || typeof idOrSlug !== 'string') return null;
   const db = await getMongoDb();
   if (!db) return null;
 
   const collection = db.collection('fatwas');
-  const clean = idOrHash.trim();
 
-  // Try id, _id, or sha256_hash
-  const doc = await collection.findOne({
-    $or: [
-      { id: clean },
-      { _id: clean as any },
-      { sha256_hash: clean.toLowerCase() },
-    ],
-  });
+  let decoded = idOrSlug.trim();
+  try {
+    decoded = decodeURIComponent(idOrSlug).trim();
+  } catch {}
 
-  if (!doc) return null;
-  return mapMongoFatwaDoc(doc);
+  const candidate = extractIdFromSlug(decoded);
+
+  // 1. Try exact matches on decoded input and extracted candidate (id, _id, sha256_hash)
+  const exactCandidates = Array.from(new Set([decoded, candidate].filter(Boolean)));
+  for (const c of exactCandidates) {
+    const doc = await collection.findOne({
+      $or: [
+        { id: c },
+        { _id: c as any },
+        { sha256_hash: c.toLowerCase() },
+      ],
+    });
+    if (doc) return mapMongoFatwaDoc(doc);
+  }
+
+  // 2. Try prefix regex match if candidate or cleanHex is a valid hex prefix (min 6 chars)
+  const cleanHex = candidate.replace(/[^a-f0-9]/gi, '').toLowerCase();
+  if (cleanHex.length >= 6) {
+    const prefixRegex = new RegExp(`^${cleanHex}`, 'i');
+    const doc = await collection.findOne({
+      $or: [
+        { id: { $regex: prefixRegex } },
+        { sha256_hash: { $regex: prefixRegex } },
+      ],
+    });
+    if (doc) return mapMongoFatwaDoc(doc);
+  }
+
+  return null;
 }
 
 export async function upsertFatwaMongo(item: IngestItemInput): Promise<IngestResultItem> {
@@ -202,6 +226,7 @@ export async function upsertFatwaMongo(item: IngestItemInput): Promise<IngestRes
   if (!db) throw new Error('MongoDB is not configured');
 
   const collection = db.collection('fatwas');
+  await collection.createIndex({ id: 1 });
   await collection.createIndex({ sha256_hash: 1 }, { unique: true });
   await collection.createIndex({ source_url: 1 });
   await collection.createIndex({ source: 1, published_date: -1 });

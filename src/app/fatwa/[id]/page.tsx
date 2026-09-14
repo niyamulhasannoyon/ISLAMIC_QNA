@@ -1,7 +1,7 @@
 import React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getFatwaById, getFatwaByIdAsync, getRelatedFatwasAsync } from "@/lib/db";
 import { formatDate, cn, getSiteUrl, createFatwaSlug } from "@/lib/utils";
 import { Header } from "@/components/Header";
@@ -34,9 +34,14 @@ interface Props {
 async function fetchFatwaResilient(id: string): Promise<FatwaQA | null> {
   if (!id) return null;
 
+  let decodedId = id.trim();
+  try {
+    decodedId = decodeURIComponent(id).trim();
+  } catch {}
+
   // 1. Direct database query (supports MongoDB Atlas if configured, and local SQLite)
   try {
-    const local = await getFatwaByIdAsync(id);
+    const local = await getFatwaByIdAsync(decodedId);
     if (local) return local;
   } catch (err) {
     console.warn("[FatwaPage] local getFatwaById lookup error:", err);
@@ -176,6 +181,21 @@ export default async function FatwaPage({ params }: Props) {
   const relatedFatwas = await getRelatedFatwasAsync(fatwa.category, fatwa.id, 5);
   const fatwaSlug = createFatwaSlug(fatwa.title, fatwa.id);
   const canonicalUrl = `${siteUrl}/fatwa/${fatwaSlug}`;
+
+  // If accessed by old broken slug, short ID, or raw UUID, permanently redirect to clean canonical slug
+  let currentDecoded = params.id.trim();
+  try {
+    currentDecoded = decodeURIComponent(params.id).trim();
+  } catch {}
+
+  let canonicalDecoded = fatwaSlug.trim();
+  try {
+    canonicalDecoded = decodeURIComponent(fatwaSlug).trim();
+  } catch {}
+
+  if (currentDecoded !== canonicalDecoded) {
+    redirect(`/fatwa/${encodeURIComponent(fatwaSlug)}`);
+  }
 
   const isAtTahreek = fatwa.source.toLowerCase().includes("tahreek");
   const isAlItisam = fatwa.source.toLowerCase().includes("itisam");

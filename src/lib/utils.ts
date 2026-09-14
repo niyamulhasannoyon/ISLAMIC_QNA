@@ -44,10 +44,13 @@ export function getSiteUrl(): string {
 
 /**
  * Creates a clean, professional, SEO-friendly human readable URL slug from a fatwa title and ID.
+ * Preserves Unicode Bengali letters and combining marks (vowel signs, viramas), strips
+ * repetitive question prefixes, and appends the 8-character ID prefix.
+ *
  * Example:
- * Title: "প্রথম রাক্'আত শেষ করে উঠার আগে বৈঠকে বসা যাবে কি"
- * ID: "4ce328b7-4afb-8e56-bca4-f132692d7094"
- * Output: "প্রথম-রাক-আত-শেষ-করে-উঠার-আগে-বৈঠকে-বসা-যাবে-কি-4ce328b7"
+ * Title: "প্রশ্ন (৩২/৪৭২) : কোন মাসবূক ব্যক্তি ইমামের সালাম ফেরানোর পর নিজের ছালাত পূর্ণ করার সময়..."
+ * ID: "4ab1a108-6526-5dd7-89d8-52ca96f155a4"
+ * Output: "কোন-মাসবূক-ব্যক্তি-ইমামের-সালাম-ফেরানোর-পর-নিজের-ছালাত-পূর্ণ-4ab1a108"
  */
 export function createFatwaSlug(title: string, id: string): string {
   if (!id) return "";
@@ -55,39 +58,60 @@ export function createFatwaSlug(title: string, id: string): string {
 
   if (!title) return id;
 
-  const cleanTitle = title
-    .toLowerCase()
+  // 1. NFC normalization & remove HTML tags
+  let clean = title
+    .normalize("NFC")
     .replace(/<[^>]*>/g, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    // 2. Strip leading question labels/numbering like "প্রশ্ন (৩২/৪৭২) :", "প্রশ্ন নং ১২৩:", "প্রশ্নঃ", "প্রশ্ন -"
+    .replace(/^প্রশ্ন\s*(\([^\)]+\)|[০-৯0-9\/\s-]+)?\s*[:ঃ-]?\s*/u, "")
+    .trim();
+
+  // If stripping the prefix emptied the title, fallback to normalized title
+  if (!clean) {
+    clean = title.normalize("NFC").trim();
+  }
+
+  // 3. Keep all Unicode Letters (\p{L}), Marks (\p{M} e.g. Bengali vowel signs, viramas),
+  // Numbers (\p{N}), spaces, and hyphens. Replace everything else with spaces.
+  clean = clean
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, " ")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-+|-+$/g, "");
 
-  if (!cleanTitle) return id;
+  if (!clean) return id;
 
-  let truncated = cleanTitle;
-  if (cleanTitle.length > 75) {
-    const lastHyphen = cleanTitle.lastIndexOf("-", 75);
-    if (lastHyphen > 25) {
-      truncated = cleanTitle.slice(0, lastHyphen);
+  // 4. Truncate at word boundary (hyphen) around ~65-70 chars
+  let truncated = clean;
+  if (clean.length > 70) {
+    const lastHyphen = clean.lastIndexOf("-", 70);
+    if (lastHyphen > 20) {
+      truncated = clean.slice(0, lastHyphen);
     } else {
-      truncated = cleanTitle.slice(0, 75);
+      truncated = clean.slice(0, 70);
     }
   }
 
-  truncated = truncated.replace(/-+$/, "");
+  // Remove any trailing hyphens
+  truncated = truncated.replace(/-+$/g, "");
 
   return truncated ? `${truncated}-${shortId}` : id;
 }
 
 /**
- * Extracts candidate ID or short-ID from a URL slug or raw ID string.
+ * Safely extracts candidate ID, short-ID prefix, or UUID from a URL slug or raw ID string.
  */
 export function extractIdFromSlug(rawInput: string): string {
   if (!rawInput) return "";
-  const decoded = decodeURIComponent(rawInput).trim();
+  let decoded = rawInput.trim();
+  try {
+    decoded = decodeURIComponent(rawInput).trim();
+  } catch {
+    // Keep decoded as rawInput if malformed URI
+  }
 
-  // If it's a full 36-char UUID or 64-char SHA-256 hash, return it directly
+  // 1. If it is already a full 36-char UUID or 64-char SHA-256 hash, return it directly
   if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(decoded)) {
     return decoded;
   }
@@ -95,7 +119,24 @@ export function extractIdFromSlug(rawInput: string): string {
     return decoded;
   }
 
-  // Extract last hyphenated token (e.g. short hex ID or alphanumeric ID suffix)
+  // 2. Slug ending with full 36-char UUID: e.g. "some-slug-4ab1a108-6526-5dd7-89d8-52ca96f155a4"
+  const uuidMatch = decoded.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i);
+  if (uuidMatch) {
+    return uuidMatch[1];
+  }
+
+  // 3. Slug ending with short hex ID (4 to 32 hex chars): e.g. "some-slug-4ab1a108"
+  const hexMatch = decoded.match(/-([a-f0-9]{4,32})$/i);
+  if (hexMatch) {
+    return hexMatch[1];
+  }
+
+  // 4. Standalone short hex ID (4 to 32 hex chars)
+  if (/^[a-f0-9]{4,32}$/i.test(decoded)) {
+    return decoded;
+  }
+
+  // 5. Fallback: extract last hyphen segment if alphanumeric
   const lastHyphenIdx = decoded.lastIndexOf("-");
   if (lastHyphenIdx !== -1) {
     const candidate = decoded.slice(lastHyphenIdx + 1);

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getDb } from './db';
+import { extractIdFromSlug } from './utils';
 
 export interface PageviewInput {
   visitorId: string;
@@ -89,13 +90,13 @@ export function recordPageview(input: PageviewInput): { success: boolean; id: st
     if (!fatwaId && input.path.includes('/fatwa/')) {
       const parts = input.path.split('/fatwa/')[1]?.split('?')[0]?.split('#')[0];
       if (parts) {
-        fatwaId = parts;
+        fatwaId = extractIdFromSlug(parts);
       }
     }
 
     if (fatwaId && !pageTitle) {
       try {
-        const row = db.prepare('SELECT title FROM fatwas WHERE id = ?').get(fatwaId) as { title?: string } | undefined;
+        const row = db.prepare('SELECT title FROM fatwas WHERE id = ? OR id LIKE ? || "%" LIMIT 1').get(fatwaId, fatwaId) as { title?: string } | undefined;
         if (row && row.title) {
           pageTitle = row.title;
         }

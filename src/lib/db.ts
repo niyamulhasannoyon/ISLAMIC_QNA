@@ -591,7 +591,10 @@ const LEGACY_ID_MAP: Record<string, string> = {
  */
 export function getFatwaById(rawId: string): FatwaQA | null {
   if (!rawId || typeof rawId !== 'string') return null;
-  const decoded = decodeURIComponent(rawId).trim();
+  let decoded = rawId.trim();
+  try {
+    decoded = decodeURIComponent(rawId).trim();
+  } catch {}
   const targetId = LEGACY_ID_MAP[decoded] || decoded;
   const extractedCandidate = extractIdFromSlug(targetId);
 
@@ -622,7 +625,7 @@ export function getFatwaById(rawId: string): FatwaQA | null {
   // 5. Try prefix match on targetId / cleanHex
   if (!r) {
     const cleanHex = (extractedCandidate || targetId).replace(/[^a-f0-9]/gi, '').toLowerCase();
-    if (cleanHex.length >= 8) {
+    if (cleanHex.length >= 6) {
       r = db.prepare("SELECT * FROM fatwas WHERE id LIKE ? || '%' LIMIT 1").get(cleanHex) as any;
       if (!r) {
         r = stmts.getByHashPrefix.get(cleanHex) as any;

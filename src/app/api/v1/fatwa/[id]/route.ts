@@ -9,10 +9,13 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
+    let id = params.id;
     if (!id) {
       return NextResponse.json({ error: 'Missing ID parameter' }, { status: 400 });
     }
+    try {
+      id = decodeURIComponent(id);
+    } catch {}
 
     const fatwa = await getFatwaByIdAsync(id);
     if (!fatwa) {
