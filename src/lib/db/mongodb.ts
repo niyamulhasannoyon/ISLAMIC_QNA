@@ -363,3 +363,98 @@ export async function getFacetsMongo(): Promise<SearchFacets> {
     scholars: scholars as { name: string; count: number }[],
   };
 }
+
+// -------------------------------------------------------------
+// SESSIONS DAO (MongoDB Atlas)
+// -------------------------------------------------------------
+
+export async function createDbSessionMongo(data: {
+  userId: string;
+  email: string;
+  role: string;
+  tokenHash: string;
+  expiresAt: string;
+}): Promise<void> {
+  const db = await getMongoDb();
+  if (!db) return;
+
+  try {
+    const collection = db.collection('sessions');
+    await collection.createIndex({ token_hash: 1 }, { unique: true });
+    await collection.createIndex({ expires_at: 1 });
+
+    const now = new Date().toISOString();
+    await collection.updateOne(
+      { token_hash: data.tokenHash },
+      {
+        $set: {
+          user_id: data.userId,
+          email: data.email.toLowerCase().trim(),
+          role: data.role,
+          token_hash: data.tokenHash,
+          expires_at: data.expiresAt,
+          last_active_at: now,
+        },
+        $setOnInsert: {
+          created_at: now,
+        },
+      },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.warn('[MongoDB createDbSessionMongo Warning]:', err);
+  }
+}
+
+export async function findDbSessionByTokenHashMongo(tokenHash: string): Promise<any | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  try {
+    const collection = db.collection('sessions');
+    const now = new Date().toISOString();
+    const doc = await collection.findOne({
+      token_hash: tokenHash,
+      expires_at: { $gt: now },
+    });
+
+    if (!doc) return null;
+
+    return {
+      id: doc.id || String(doc._id),
+      user_id: doc.user_id,
+      token_hash: doc.token_hash,
+      role: doc.role,
+      email: doc.email,
+      created_at: doc.created_at,
+      expires_at: doc.expires_at,
+      last_active_at: doc.last_active_at,
+    };
+  } catch (err) {
+    console.warn('[MongoDB findDbSessionByTokenHashMongo Warning]:', err);
+    return null;
+  }
+}
+
+export async function deleteDbSessionMongo(tokenHash: string): Promise<void> {
+  const db = await getMongoDb();
+  if (!db) return;
+
+  try {
+    await db.collection('sessions').deleteOne({ token_hash: tokenHash });
+  } catch (err) {
+    console.warn('[MongoDB deleteDbSessionMongo Warning]:', err);
+  }
+}
+
+export async function deleteSessionsByUserIdMongo(userId: string): Promise<void> {
+  const db = await getMongoDb();
+  if (!db) return;
+
+  try {
+    await db.collection('sessions').deleteMany({ user_id: userId });
+  } catch (err) {
+    console.warn('[MongoDB deleteSessionsByUserIdMongo Warning]:', err);
+  }
+}
+

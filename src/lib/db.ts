@@ -13,6 +13,10 @@ import {
   createOrUpdateUserMongo,
   upsertFatwaMongo,
   deleteFatwaMongo,
+  createDbSessionMongo,
+  findDbSessionByTokenHashMongo,
+  deleteDbSessionMongo,
+  deleteSessionsByUserIdMongo,
 } from './db/mongodb';
 
 // Singleton instance across hot reloads in Next.js
@@ -943,6 +947,77 @@ export function cleanupExpiredSessions(): void {
   const db = getDb();
   const now = new Date().toISOString();
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+}
+
+export async function createDbSessionAsync(data: {
+  userId: string;
+  email: string;
+  role: string;
+  tokenHash: string;
+  expiresAt: string;
+}): Promise<void> {
+  if (isMongoConfigured()) {
+    try {
+      await createDbSessionMongo(data);
+    } catch (err) {
+      console.warn('[MongoDB createDbSessionAsync Warning]:', err);
+    }
+  }
+
+  try {
+    createDbSession(data);
+  } catch (err) {
+    // Safe to ignore in ephemeral serverless SQLite
+  }
+}
+
+export async function findDbSessionByTokenHashAsync(tokenHash: string): Promise<DbSession | null> {
+  if (isMongoConfigured()) {
+    try {
+      const session = await findDbSessionByTokenHashMongo(tokenHash);
+      if (session) return session;
+    } catch (err) {
+      console.warn('[MongoDB findDbSessionByTokenHashAsync Warning]:', err);
+    }
+  }
+
+  try {
+    return findDbSessionByTokenHash(tokenHash);
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteDbSessionAsync(tokenHash: string): Promise<void> {
+  if (isMongoConfigured()) {
+    try {
+      await deleteDbSessionMongo(tokenHash);
+    } catch (err) {
+      console.warn('[MongoDB deleteDbSessionAsync Warning]:', err);
+    }
+  }
+
+  try {
+    deleteDbSession(tokenHash);
+  } catch {
+    // ignore
+  }
+}
+
+export async function deleteSessionsByUserIdAsync(userId: string): Promise<void> {
+  if (isMongoConfigured()) {
+    try {
+      await deleteSessionsByUserIdMongo(userId);
+    } catch (err) {
+      console.warn('[MongoDB deleteSessionsByUserIdAsync Warning]:', err);
+    }
+  }
+
+  try {
+    deleteSessionsByUserId(userId);
+  } catch {
+    // ignore
+  }
 }
 
 /**

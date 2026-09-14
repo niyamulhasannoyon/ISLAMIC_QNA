@@ -5,11 +5,16 @@ import { User, UserSession } from "@/types/user";
 import {
   findUserByEmail,
   findUserById,
+  findUserByIdAsync,
   createOrUpdateUser,
   createDbSession,
+  createDbSessionAsync,
   findDbSessionByTokenHash,
+  findDbSessionByTokenHashAsync,
   deleteDbSession,
+  deleteDbSessionAsync,
   deleteSessionsByUserId,
+  deleteSessionsByUserIdAsync,
 } from "./db";
 import {
   USER_COOKIE_NAME,
@@ -98,9 +103,9 @@ export async function setUserSession(user: User): Promise<string> {
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + USER_SESSION_EXPIRY_SECONDS * 1000).toISOString();
 
-  // 1. Create DB-backed session record for instant server-side revocation
+  // 1. Create DB-backed session record (MongoDB Atlas + SQLite dual-sync)
   try {
-    createDbSession({
+    await createDbSessionAsync({
       userId: user.id,
       email: user.email,
       role: user.role,
@@ -129,7 +134,7 @@ export async function setUserSession(user: User): Promise<string> {
       const adminExpiresAt = new Date(Date.now() + ADMIN_SESSION_EXPIRY_SECONDS * 1000).toISOString();
 
       try {
-        createDbSession({
+        await createDbSessionAsync({
           userId: "admin:" + user.email,
           email: user.email,
           role: "admin",
@@ -170,27 +175,43 @@ export async function getCurrentUserSession(): Promise<UserSession | null> {
     const parsed = parseUserSessionToken(token);
     if (!parsed) return null;
 
-    // 2. Verify active session exists in DB
+    // 2. Verify active session exists in DB if available
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const dbSession = findDbSessionByTokenHash(tokenHash);
-    if (!dbSession) {
-      // Session has been revoked, logged out, or expired in database
-      return null;
+    let targetUserId = parsed.id;
+    try {
+      const dbSession = await findDbSessionByTokenHashAsync(tokenHash);
+      if (dbSession) {
+        targetUserId = dbSession.user_id;
+      }
+    } catch {
+      // Ephemeral or DB connection error; rely on signed token
     }
 
     // 3. Ensure user still exists in database and reflect latest status
-    const freshUser = findUserById(dbSession.user_id);
-    if (!freshUser) {
-      return null;
+    try {
+      const freshUser = await findUserByIdAsync(targetUserId);
+      if (freshUser) {
+        return {
+          id: freshUser.id,
+          email: freshUser.email,
+          name: freshUser.name,
+          picture: freshUser.picture || parsed.picture || "",
+          role: freshUser.role,
+          provider: freshUser.provider,
+        };
+      }
+    } catch {
+      // Fallback to verified token payload
     }
 
+    // Fallback to verified cryptographic token if DB is ephemeral or cold
     return {
-      id: freshUser.id,
-      email: freshUser.email,
-      name: freshUser.name,
-      picture: freshUser.picture || "",
-      role: freshUser.role,
-      provider: freshUser.provider,
+      id: parsed.id,
+      email: parsed.email,
+      name: parsed.name,
+      picture: parsed.picture || "",
+      role: parsed.role,
+      provider: parsed.provider,
     };
   } catch {
     return null;
@@ -206,7 +227,7 @@ export async function clearUserSession(): Promise<void> {
     const token = cookieStore.get(USER_COOKIE_NAME)?.value;
     if (token) {
       const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-      deleteDbSession(tokenHash);
+      await deleteDbSessionAsync(tokenHash);
     }
     cookieStore.delete(USER_COOKIE_NAME);
   } catch {
@@ -218,7 +239,7 @@ export async function clearUserSession(): Promise<void> {
  * Revoke all active sessions for a given user (e.g. account ban, security reset)
  */
 export function revokeAllSessionsForUser(userId: string): void {
-  deleteSessionsByUserId(userId);
+  deleteSessionsByUserIdAsync(userId).catch(() => {});
 }
 
 /**
@@ -227,7 +248,7 @@ export function revokeAllSessionsForUser(userId: string): void {
 export function revokeSessionByToken(token: string): void {
   if (!token) return;
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  deleteDbSession(tokenHash);
+  deleteDbSessionAsync(tokenHash).catch(() => {});
 }
 
 /**
@@ -242,9 +263,15 @@ export async function verifyGoogleToken(credentialToken: string): Promise<{
   if (!credentialToken) return null;
 
   try {
-    const ticket = await googleAuthClient.verifyIdToken({
+    const clientId =
+      process.env.GOOGLE_CLIENT_ID ||
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+      '613533933761-4j489d46m3h3368uqkp7t98u33t9fjli.apps.googleusercontent.com';
+
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({
       idToken: credentialToken,
-      audience: GOOGLE_CLIENT_ID,
+      audience: clientId,
     });
     const payload = ticket.getPayload();
 

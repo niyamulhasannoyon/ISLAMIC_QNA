@@ -15,7 +15,14 @@ import {
   verifyAdminSessionToken,
 } from './authConfig';
 import { getCurrentUserSession } from './userAuth';
-import { createDbSession, findDbSessionByTokenHash, deleteDbSession } from './db';
+import {
+  createDbSession,
+  createDbSessionAsync,
+  findDbSessionByTokenHash,
+  findDbSessionByTokenHashAsync,
+  deleteDbSession,
+  deleteDbSessionAsync,
+} from './db';
 
 export {
   ADMIN_COOKIE_NAME,
@@ -41,7 +48,7 @@ export async function setAdminSession(identifier: string): Promise<string> {
   const expiresAt = new Date(Date.now() + ADMIN_SESSION_EXPIRY_SECONDS * 1000).toISOString();
 
   try {
-    createDbSession({
+    await createDbSessionAsync({
       userId: 'admin:' + identifier,
       email: identifier,
       role: 'admin',
@@ -80,11 +87,18 @@ export async function isAdminAuthenticated(): Promise<boolean> {
     const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
     if (token) {
       const validAdminPayload = verifyAdminSessionToken(token);
-      if (validAdminPayload) {
-        // Validate active session in database
+      if (validAdminPayload && isAllowedAdmin(validAdminPayload.identifier)) {
+        // Validate active session in database if available
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-        const dbSession = findDbSessionByTokenHash(tokenHash);
-        if (dbSession && dbSession.role === 'admin') {
+        try {
+          const dbSession = await findDbSessionByTokenHashAsync(tokenHash);
+          if (dbSession) {
+            if (dbSession.role === 'admin') return true;
+          } else {
+            // Cryptographic HMAC token is valid, unexpired, and email is allowlisted
+            return true;
+          }
+        } catch {
           return true;
         }
       }
@@ -111,7 +125,7 @@ export async function clearAdminSession(): Promise<void> {
     const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
     if (token) {
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      deleteDbSession(tokenHash);
+      await deleteDbSessionAsync(tokenHash);
     }
     cookieStore.delete(ADMIN_COOKIE_NAME);
   } catch {

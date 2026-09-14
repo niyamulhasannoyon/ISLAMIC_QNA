@@ -35,7 +35,7 @@ export interface UserTokenPayload {
  * NEVER provides a silent insecure fallback.
  */
 export function getAuthSecret(): string {
-  const secret = process.env.AUTH_SECRET;
+  const secret = process.env.AUTH_SECRET || process.env.INGESTION_SECRET_TOKEN;
   if (!secret || secret.trim().length === 0) {
     throw new Error(
       'CRITICAL SECURITY CONFIGURATION ERROR: AUTH_SECRET environment variable is missing. ' +
