@@ -37,48 +37,70 @@ function getInitialParams() {
 export default function Home() {
   const { t, isRTL, lang } = useLanguage();
 
-  // Parse initial parameters synchronously from window.location on client
-  const [initialParams] = useState(() => getInitialParams());
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedSource, setSelectedSource] = useState("All");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedScholar, setSelectedScholar] = useState("All");
+  const [page, setPage] = useState(1);
 
-  const [query, setQuery] = useState(initialParams.q);
-  const [debouncedQuery, setDebouncedQuery] = useState(initialParams.q);
-  const [selectedSource, setSelectedSource] = useState(initialParams.source);
-  const [selectedCategory, setSelectedCategory] = useState(initialParams.category);
-  const [selectedScholar, setSelectedScholar] = useState(initialParams.scholar);
-  const [page, setPage] = useState(initialParams.page);
-
-  // Synchronous cache lookup for instant 0ms render on back navigation
-  const initialCacheKey = buildCacheKey({
-    q: initialParams.q,
-    source: initialParams.source,
-    category: initialParams.category,
-    scholar: initialParams.scholar,
-    page: initialParams.page,
-  });
-  const cachedData = typeof window !== "undefined" ? getCachedSearch(initialCacheKey) : null;
-
-  const [results, setResults] = useState<SearchResultItem[]>(cachedData?.results || []);
-  const [totalResults, setTotalResults] = useState<number | undefined>(cachedData?.total);
-  const [totalPages, setTotalPages] = useState<number>(cachedData?.totalPages || 1);
-  const [tookMs, setTookMs] = useState<number | undefined>(cachedData?.tookMs);
-  const [sourceFacets, setSourceFacets] = useState<FacetCount[]>(cachedData?.facets?.sources || []);
-  const [categoryFacets, setCategoryFacets] = useState<FacetCount[]>(cachedData?.facets?.categories || []);
-  const [scholarFacets, setScholarFacets] = useState<FacetCount[]>(cachedData?.facets?.scholars || []);
-  const [isLoading, setIsLoading] = useState<boolean>(!cachedData);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [totalResults, setTotalResults] = useState<number | undefined>(undefined);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [tookMs, setTookMs] = useState<number | undefined>(undefined);
+  const [sourceFacets, setSourceFacets] = useState<FacetCount[]>([]);
+  const [categoryFacets, setCategoryFacets] = useState<FacetCount[]>([]);
+  const [scholarFacets, setScholarFacets] = useState<FacetCount[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const [activeModalItem, setActiveModalItem] = useState<SearchResultItem | null>(null);
   const isInitialMount = useRef(true);
   const hasRestoredScroll = useRef(false);
 
+  // Initialize client state from URL and cache once hydration completes safely
+  useEffect(() => {
+    setIsHydrated(true);
+    const p = getInitialParams();
+    setQuery(p.q);
+    setDebouncedQuery(p.q);
+    setSelectedSource(p.source);
+    setSelectedCategory(p.category);
+    setSelectedScholar(p.scholar);
+    setPage(p.page);
+
+    const initialCacheKey = buildCacheKey({
+      q: p.q,
+      source: p.source,
+      category: p.category,
+      scholar: p.scholar,
+      page: p.page,
+    });
+    const cached = getCachedSearch(initialCacheKey);
+    if (cached) {
+      setResults(cached.results || []);
+      setTotalResults(cached.total);
+      setTotalPages(cached.totalPages || 1);
+      setTookMs(cached.tookMs);
+      if (cached.facets) {
+        setSourceFacets(cached.facets.sources || []);
+        setCategoryFacets(cached.facets.categories || []);
+        setScholarFacets(cached.facets.scholars || []);
+      }
+      setIsLoading(false);
+    }
+  }, []);
+
   // Fast client-side debouncing (180ms)
   useEffect(() => {
+    if (!isHydrated) return;
     const handler = setTimeout(() => {
       setDebouncedQuery(query);
       setPage(1);
     }, 180);
 
     return () => clearTimeout(handler);
-  }, [query]);
+  }, [query, isHydrated]);
 
   // Execute Search API call with Stale-While-Revalidate pattern
   const performSearch = useCallback(async () => {
@@ -139,8 +161,10 @@ export default function Home() {
   }, [debouncedQuery, selectedSource, selectedCategory, selectedScholar, page]);
 
   useEffect(() => {
-    performSearch();
-  }, [performSearch]);
+    if (isHydrated) {
+      performSearch();
+    }
+  }, [performSearch, isHydrated]);
 
   // Restore saved scroll position after cached/fresh results render
   useEffect(() => {

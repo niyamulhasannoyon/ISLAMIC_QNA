@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 
 interface SafeHighlightProps {
@@ -7,6 +9,7 @@ interface SafeHighlightProps {
 }
 
 function decodeBasicHtmlEntities(str: string): string {
+  if (typeof str !== 'string') return '';
   return str
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -20,6 +23,7 @@ function decodeBasicHtmlEntities(str: string): string {
  * Strips all HTML tags except when parsing structured tokens.
  */
 function stripHtmlTags(str: string): string {
+  if (typeof str !== 'string') return '';
   return str.replace(/<[^>]*>/g, '');
 }
 
@@ -29,16 +33,17 @@ function stripHtmlTags(str: string): string {
  * All other content is safely rendered as pure React text nodes, neutralizing any XSS payloads.
  */
 export function SafeHighlight({ text, className, as: Component = 'span' }: SafeHighlightProps) {
-  if (!text) return null;
+  if (!text || typeof text !== 'string') return null;
 
-  // Split content by `<mark ...>...</mark>` tokens
-  const parts = text.split(/(<mark[^>]*>[\s\S]*?<\/mark>)/gi);
+  try {
+    // Split content by `<mark ...>...</mark>` tokens
+    const parts = text.split(/(<mark[^>]*>[\s\S]*?<\/mark>)/gi);
 
-  // If no mark tags were present, render plain text safely
-  if (parts.length === 1 && !/<mark[^>]*>/i.test(parts[0])) {
-    const clean = stripHtmlTags(parts[0]);
-    return <Component className={className}>{decodeBasicHtmlEntities(clean)}</Component>;
-  }
+    // If no mark tags were present, render plain text safely
+    if (parts.length === 1 && !/<mark[^>]*>/i.test(parts[0])) {
+      const clean = stripHtmlTags(parts[0]);
+      return <Component className={className}>{decodeBasicHtmlEntities(clean)}</Component>;
+    }
 
   return (
     <Component className={className}>
@@ -66,6 +71,9 @@ export function SafeHighlight({ text, className, as: Component = 'span' }: SafeH
       })}
     </Component>
   );
+  } catch {
+    return <Component className={className}>{String(text)}</Component>;
+  }
 }
 
 export default SafeHighlight;
