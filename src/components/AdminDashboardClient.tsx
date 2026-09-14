@@ -233,7 +233,10 @@ export function AdminDashboardClient({
     try {
       await fetch('/api/v1/admin/auth', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
         body: JSON.stringify({ action: 'logout' }),
       });
       router.push('/admin/login');
@@ -263,7 +266,10 @@ export function AdminDashboardClient({
 
       const res = await fetch('/api/v1/admin/fatwa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
         body: JSON.stringify(payload),
       });
 
@@ -306,6 +312,9 @@ export function AdminDashboardClient({
     try {
       const res = await fetch(`/api/v1/admin/fatwa?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+        },
       });
       if (res.ok) {
         setDeleteConfirmId(null);

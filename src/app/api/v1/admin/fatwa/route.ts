@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminAuthenticated } from '@/lib/auth';
-import { getDb, invalidateFacetsCache, getFatwaById } from '@/lib/db';
+import {
+  getDb,
+  invalidateFacetsCache,
+  upsertFatwaAsync,
+  deleteFatwaAsync,
+} from '@/lib/db';
+import { isMongoConfigured, listFatwasMongo } from '@/lib/db/mongodb';
 import { computeFatwaHash, hashToUuid, normalizeText } from '@/lib/hash';
+import { verifyCsrf } from '@/lib/csrf';
+import { safeErrorResponse } from '@/lib/apiErrors';
+import { sanitizeFatwaInput } from '@/lib/sanitizer';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +29,23 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '15', 10)));
     const offset = (page - 1) * limit;
 
+    // If MongoDB Atlas is configured, read from persistent Atlas collection
+    if (isMongoConfigured()) {
+      try {
+        const mongoRes = await listFatwasMongo({ q, source, category, page, limit });
+        return NextResponse.json({
+          items: mongoRes.items,
+          total: mongoRes.total,
+          page,
+          limit,
+          totalPages: Math.ceil(mongoRes.total / limit) || 1,
+        });
+      } catch (mongoErr) {
+        console.warn('[Admin Fatwa] Mongo list failed, falling back to SQLite:', mongoErr);
+      }
+    }
+
+    // Local SQLite fallback
     const db = getDb();
     const whereClauses: string[] = [];
     const params: any[] = [];
@@ -63,65 +89,76 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / limit) || 1,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Failed to fetch fatwas', message: error?.message }, { status: 500 });
+    return safeErrorResponse('Failed to fetch fatwas', 500, error);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = verifyCsrf(req);
+    if (!csrf.valid) {
+      return NextResponse.json({ error: csrf.error || 'Forbidden: CSRF validation failed' }, { status: 403 });
+    }
+
     const authenticated = await isAdminAuthenticated();
     if (!authenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
-    const { id: inputId, title, question, answer, source, source_url, category, scholar, tags } = body;
+    const sanitized = sanitizeFatwaInput(body);
+    const { id: inputId, title, question, answer, source, source_url, category, scholar, tags } = sanitized;
 
     if (!title || !question || !answer || !source) {
       return NextResponse.json({ error: 'Title, question, answer, and source are required' }, { status: 400 });
     }
 
-    const db = getDb();
     const normTitle = normalizeText(title);
     const normQuestion = normalizeText(question);
     const normAnswer = answer.trim();
     const normScholar = normalizeText(scholar) || 'ফতোয়া বোর্ড';
     const normCategory = category?.trim() || 'General';
-    const normTags = JSON.stringify(Array.isArray(tags) ? tags : [normCategory]);
+    const normTags = Array.isArray(tags) ? tags : [normCategory];
     const normSourceUrl = source_url?.trim() || 'https://deenqna.vercel.app';
     const now = new Date().toISOString();
 
     const sha256_hash = computeFatwaHash({ question: normQuestion, answer: normAnswer });
+    const fatwaId = inputId || hashToUuid(sha256_hash);
 
-    if (inputId) {
-      // Update existing record
-      db.prepare(`
-        UPDATE fatwas
-        SET title = ?, question = ?, answer = ?, source = ?, source_url = ?, category = ?, scholar = ?, tags = ?, updated_at = ?
-        WHERE id = ?
-      `).run(normTitle, normQuestion, normAnswer, source, normSourceUrl, normCategory, normScholar, normTags, now, inputId);
+    await upsertFatwaAsync({
+      id: fatwaId,
+      source: source as any,
+      source_url: normSourceUrl,
+      title: normTitle,
+      question: normQuestion,
+      answer: normAnswer,
+      category: normCategory,
+      tags: normTags,
+      scholar: normScholar,
+      published_date: now.split('T')[0],
+      sha256_hash,
+      scraped_at: now,
+    });
 
-      invalidateFacetsCache();
-      return NextResponse.json({ success: true, id: inputId, message: 'ফতোয়া সফলভাবে আপডেট করা হয়েছে' });
-    } else {
-      // Insert new record
-      const id = hashToUuid(sha256_hash);
-      db.prepare(`
-        INSERT OR REPLACE INTO fatwas (
-          id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, source, normSourceUrl, normTitle, normQuestion, normAnswer, normCategory, normTags, normScholar, now.split('T')[0], sha256_hash, now, now, now);
+    invalidateFacetsCache();
 
-      invalidateFacetsCache();
-      return NextResponse.json({ success: true, id, message: 'নতুন ফতোয়া সফলভাবে যোগ করা হয়েছে' });
-    }
+    return NextResponse.json({
+      success: true,
+      id: fatwaId,
+      message: inputId ? 'ফতোয়া সফলভাবে আপডেট করা হয়েছে' : 'নতুন ফতোয়া সফলভাবে যোগ করা হয়েছে',
+    });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Save failed', message: error?.message }, { status: 500 });
+    return safeErrorResponse('Save failed', 500, error);
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
+    const csrf = verifyCsrf(req);
+    if (!csrf.valid) {
+      return NextResponse.json({ error: csrf.error || 'Forbidden: CSRF validation failed' }, { status: 403 });
+    }
+
     const authenticated = await isAdminAuthenticated();
     if (!authenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -134,12 +171,11 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    const db = getDb();
-    db.prepare('DELETE FROM fatwas WHERE id = ?').run(id);
+    await deleteFatwaAsync(id);
     invalidateFacetsCache();
 
     return NextResponse.json({ success: true, message: 'ফতোয়া মুছে ফেলা হয়েছে' });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Delete failed', message: error?.message }, { status: 500 });
+    return safeErrorResponse('Delete failed', 500, error);
   }
 }

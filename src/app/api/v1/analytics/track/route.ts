@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getCurrentUserSession } from '@/lib/userAuth';
 import { recordPageview } from '@/lib/analytics';
+import { safeErrorResponse } from '@/lib/apiErrors';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,6 @@ export async function POST(req: NextRequest) {
 
     return res;
   } catch (err: any) {
-    console.error('[Analytics Track API Error]:', err);
-    return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
+    return safeErrorResponse('Analytics tracking error', 500, err);
   }
 }

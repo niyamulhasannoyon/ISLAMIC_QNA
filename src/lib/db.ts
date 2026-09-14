@@ -5,6 +5,15 @@ import crypto from 'crypto';
 import { FatwaQA, FatwaSource, IngestItemInput, IngestResultItem, SearchFacets } from '@/types/fatwa';
 import { computeFatwaHash, normalizeText, hashToUuid } from './hash';
 import { extractIdFromSlug } from './utils';
+import {
+  isMongoConfigured,
+  getFatwaByIdMongo,
+  findUserByEmailMongo,
+  findUserByIdMongo,
+  createOrUpdateUserMongo,
+  upsertFatwaMongo,
+  deleteFatwaMongo,
+} from './db/mongodb';
 
 // Singleton instance across hot reloads in Next.js
 declare global {
@@ -172,6 +181,21 @@ export function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_pv_user_type ON analytics_pageviews(user_type);
     CREATE INDEX IF NOT EXISTS idx_pv_path ON analytics_pageviews(path);
     CREATE INDEX IF NOT EXISTS idx_pv_fatwa_id ON analytics_pageviews(fatwa_id);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL DEFAULT 'user',
+      email TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      last_active_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
   `);
 
   // Handle auto-migration for existing SQLite tables
@@ -787,6 +811,195 @@ export function createOrUpdateUser(userData: {
   );
 
   return findUserById(userId)!;
+}
+
+export interface DbSession {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  role: string;
+  email: string;
+  created_at: string;
+  expires_at: string;
+  last_active_at: string;
+}
+
+export function createDbSession(data: {
+  userId: string;
+  email: string;
+  role: string;
+  tokenHash: string;
+  expiresAt: string;
+}): DbSession {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO sessions (id, user_id, token_hash, role, email, created_at, expires_at, last_active_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, data.userId, data.tokenHash, data.role, data.email.toLowerCase().trim(), now, data.expiresAt, now);
+
+  return {
+    id,
+    user_id: data.userId,
+    token_hash: data.tokenHash,
+    role: data.role,
+    email: data.email.toLowerCase().trim(),
+    created_at: now,
+    expires_at: data.expiresAt,
+    last_active_at: now,
+  };
+}
+
+export function findDbSessionByTokenHash(tokenHash: string): DbSession | null {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const row = db.prepare(`
+    SELECT * FROM sessions 
+    WHERE token_hash = ? AND expires_at > ?
+  `).get(tokenHash, now) as DbSession | undefined;
+
+  return row || null;
+}
+
+export function deleteDbSession(tokenHash: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
+}
+
+export function deleteSessionsByUserId(userId: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+}
+
+export function cleanupExpiredSessions(): void {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+}
+
+/**
+ * Hybrid persistent single fatwa fetch:
+ * Checks MongoDB Atlas first if configured, falling back to local SQLite.
+ */
+export async function getFatwaByIdAsync(rawId: string): Promise<FatwaQA | null> {
+  if (isMongoConfigured()) {
+    try {
+      const doc = await getFatwaByIdMongo(rawId);
+      if (doc) return doc;
+    } catch (err) {
+      console.warn('[MongoDB getFatwaByIdAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return getFatwaById(rawId);
+}
+
+/**
+ * Hybrid persistent fatwa upsert:
+ * Writes to MongoDB Atlas if configured, and dual-syncs to SQLite.
+ */
+export async function upsertFatwaAsync(item: IngestItemInput): Promise<UpsertResult> {
+  if (isMongoConfigured()) {
+    try {
+      const res = await upsertFatwaMongo(item);
+      try {
+        upsertFatwa(item);
+      } catch (sqLiteErr) {
+        // Safe to ignore in ephemeral serverless
+      }
+      return res;
+    } catch (err) {
+      console.warn('[MongoDB upsertFatwaAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return upsertFatwa(item);
+}
+
+/**
+ * Hybrid persistent fatwa delete:
+ * Deletes from MongoDB Atlas if configured, and deletes from SQLite.
+ */
+export async function deleteFatwaAsync(id: string): Promise<boolean> {
+  let deleted = false;
+  if (isMongoConfigured()) {
+    try {
+      deleted = await deleteFatwaMongo(id);
+    } catch (err) {
+      console.warn('[MongoDB deleteFatwaAsync Warning]:', err);
+    }
+  }
+
+  try {
+    const db = getDb();
+    db.prepare('DELETE FROM fatwas WHERE id = ?').run(id);
+    invalidateFacetsCache();
+    deleted = true;
+  } catch (err) {
+    // ignore
+  }
+
+  return deleted;
+}
+
+/**
+ * Hybrid persistent user fetch by email:
+ * Reads from MongoDB Atlas if configured, otherwise SQLite.
+ */
+export async function findUserByEmailAsync(email: string): Promise<User | null> {
+  if (isMongoConfigured()) {
+    try {
+      const user = await findUserByEmailMongo(email);
+      if (user) return user;
+    } catch (err) {
+      console.warn('[MongoDB findUserByEmailAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return findUserByEmail(email);
+}
+
+/**
+ * Hybrid persistent user fetch by ID:
+ * Reads from MongoDB Atlas if configured, otherwise SQLite.
+ */
+export async function findUserByIdAsync(id: string): Promise<User | null> {
+  if (isMongoConfigured()) {
+    try {
+      const user = await findUserByIdMongo(id);
+      if (user) return user;
+    } catch (err) {
+      console.warn('[MongoDB findUserByIdAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return findUserById(id);
+}
+
+/**
+ * Hybrid persistent user create or update:
+ * Saves to MongoDB Atlas if configured, and dual-syncs to SQLite.
+ */
+export async function createOrUpdateUserAsync(userData: {
+  email: string;
+  name: string;
+  picture?: string;
+  password_hash?: string;
+  role?: 'user' | 'admin';
+  provider?: 'credentials' | 'google';
+}): Promise<User> {
+  if (isMongoConfigured()) {
+    try {
+      const user = await createOrUpdateUserMongo(userData);
+      try {
+        createOrUpdateUser(userData);
+      } catch (sqLiteErr) {
+        // Safe to ignore in ephemeral serverless
+      }
+      return user;
+    } catch (err) {
+      console.warn('[MongoDB createOrUpdateUserAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return createOrUpdateUser(userData);
 }
 
 

@@ -1,46 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOrUpdateUser } from "@/lib/db";
+import { createOrUpdateUserAsync } from "@/lib/db";
 import { verifyGoogleToken, setUserSession } from "@/lib/userAuth";
 import { setAdminSession, isAllowedAdminEmail } from "@/lib/auth";
+import { safeErrorResponse } from "@/lib/apiErrors";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { credentialToken, isAdminLogin, mockUser } = body;
+    const { credentialToken, isAdminLogin } = body;
 
-    let googleProfile: { email: string; name: string; picture: string } | null = null;
-
-    // 1. Verify official Google OAuth ID token if provided
-    if (credentialToken) {
-      googleProfile = await verifyGoogleToken(credentialToken);
+    if (!credentialToken || typeof credentialToken !== "string") {
+      return NextResponse.json(
+        { error: "Google প্রমাণীকরণ টোকেন (credentialToken) আবশ্যক।" },
+        { status: 400 }
+      );
     }
 
-    // 2. Allow fallback demo profile for local testing if explicitly provided
-    if (!googleProfile && mockUser && mockUser.email) {
-      googleProfile = {
-        email: mockUser.email,
-        name: mockUser.name || mockUser.email.split("@")[0],
-        picture: mockUser.picture || "https://lh3.googleusercontent.com/a/default-user=s96-c",
-      };
-    }
+    // Verify official Google OAuth ID token with Google's public keys
+    const googleProfile = await verifyGoogleToken(credentialToken);
 
     if (!googleProfile) {
       return NextResponse.json(
-        { error: "Google প্রমাণীকরণ ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন。" },
-        { status: 400 }
+        { error: "Google প্রমাণীকরণ ব্যর্থ হয়েছে বা টোকেনটি অবৈধ। অনুগ্রহ করে পুনরায় চেষ্টা করুন।" },
+        { status: 401 }
       );
     }
 
     const emailLower = googleProfile.email.toLowerCase().trim();
     const isAdminAuthorized = isAllowedAdminEmail(emailLower);
 
-    // Only allow admin role if email is explicitly authorized
+    // If request originated from admin login, reject unauthorized accounts with 403
+    if (isAdminLogin && !isAdminAuthorized) {
+      return NextResponse.json(
+        {
+          error: `অননুমোদিত এডমিন একাউন্ট। '${googleProfile.email}' ইমেইলটি এডমিন প্যানেলের জন্য অনুমোদিত নয়।`,
+          isUnauthorizedAdmin: true,
+        },
+        { status: 403 }
+      );
+    }
+
+    // Only grant admin role if email is explicitly in allowed admin list
     const role = isAdminAuthorized ? "admin" : "user";
 
-    // Create or update Google user profile in SQLite
-    const user = createOrUpdateUser({
+    // Create or update Google user profile (MongoDB Atlas + SQLite dual-sync)
+    const user = await createOrUpdateUserAsync({
       email: googleProfile.email,
       name: googleProfile.name,
       picture: googleProfile.picture,
@@ -67,12 +73,8 @@ export async function POST(req: NextRequest) {
         provider: user.provider,
       },
       redirect: user.role === "admin" ? "/admin" : "/",
-      isUnauthorizedAdmin: isAdminLogin && !isAdminAuthorized,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: "Google Sign-In failed", message: error?.message },
-      { status: 500 }
-    );
+    return safeErrorResponse("Google Sign-In failed", 500, error);
   }
 }

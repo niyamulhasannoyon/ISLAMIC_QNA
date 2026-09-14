@@ -4,19 +4,25 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "tsx src/scripts/seed.ts && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx src/scripts/seed.ts",
     "import:json": "tsx src/scripts/import-json.ts",
     "sync:live": "python3 scraper/incremental_scraper.py",
-    "test": "tsx src/scripts/test-search.ts && tsx src/scripts/test-api.ts",
+    "migrate:mongo": "tsx src/scripts/migrate-to-mongo.ts",
+    "test": "tsx src/scripts/test-search.ts && tsx src/scripts/test-api.ts && npm run test:security && npm run test:hygiene-security",
     "test:search": "tsx src/scripts/test-search.ts",
-    "test:api": "tsx src/scripts/test-api.ts"
+    "test:api": "tsx src/scripts/test-api.ts",
+    "test:security": "tsx src/scripts/test-security-hardening.ts && tsx src/scripts/test-google-auth-security.ts && tsx src/scripts/test-admin-credentials-security.ts && tsx src/scripts/test-auth-session-security.ts",
+    "test:hygiene-security": "tsx src/scripts/test-hygiene-and-security.ts",
+    "test:admin-creds": "tsx src/scripts/test-admin-credentials-security.ts",
+    "test:session-security": "tsx src/scripts/test-auth-session-security.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",
     "clsx": "^2.1.1",
+    "google-auth-library": "^11.0.2",
     "lucide-react": "^0.453.0",
     "minisearch": "^7.1.0",
     "mongodb": "^7.6.0",

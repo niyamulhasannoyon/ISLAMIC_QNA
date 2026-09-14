@@ -32,7 +32,7 @@ Fatwa Contexts Provided:
 
 export async function generateRAGAnswer(userQuestion: string): Promise<RAGResponse> {
   const startTime = Date.now();
-  const apiKey = process.env.MISTRAL_API_KEY || 'v84Ftx7BcJBugkq0Cig51Kwcl2lYjWav';
+  const apiKey = process.env.MISTRAL_API_KEY;
 
   // 1. Retrieve Context Documents via Vector / Hybrid Search
   let contextDocs: FatwaQA[] = [];
@@ -92,6 +92,24 @@ export async function generateRAGAnswer(userQuestion: string): Promise<RAGRespon
       sources: [],
       grounded: false,
       model: 'mistral-7b',
+    };
+  }
+
+  // If no Mistral API key is configured, gracefully return top retrieved fatwa directly without external LLM call
+  if (!apiKey) {
+    const topDoc = contextDocs[0];
+    return {
+      answer: `${topDoc.answer.slice(0, 450)}...\n\n(সূত্র: ${topDoc.title} - ${topDoc.scholar})`,
+      sources: contextDocs.map((d) => ({
+        id: d.id,
+        title: d.title,
+        scholar: d.scholar,
+        source: d.source,
+        source_url: d.source_url,
+        published_date: d.published_date,
+      })),
+      grounded: true,
+      model: 'fallback-direct',
     };
   }
 

@@ -20,16 +20,19 @@ export const FatwaIngestionItemSchema = z.object({
 export const FatwaIngestionBatchSchema = z.array(FatwaIngestionItemSchema);
 
 export const SearchQuerySchema = z.object({
-  q: z.string().optional().default(''),
-  source: z.string().optional(),
-  category: z.string().optional(),
-  scholar: z.string().optional(),
+  q: z.string().max(500, 'Search query cannot exceed 500 characters').optional().default(''),
+  source: z.string().max(100, 'Source filter cannot exceed 100 characters').optional(),
+  category: z.string().max(100, 'Category filter cannot exceed 100 characters').optional(),
+  scholar: z.string().max(100, 'Scholar filter cannot exceed 100 characters').optional(),
   page: z.coerce.number().int().positive().optional().default(1),
-  limit: z.coerce.number().int().positive().max(100).optional().default(10),
+  limit: z.coerce.number().int().positive().max(100, 'Limit cannot exceed 100').optional().default(10),
 });
 
 export const RAGQuerySchema = z.object({
-  question: z.string().min(3, 'Question must be at least 3 characters'),
+  question: z
+    .string()
+    .min(3, 'Question must be at least 3 characters')
+    .max(1000, 'Question cannot exceed 1000 characters'),
   contextLimit: z.coerce.number().int().positive().max(10).optional().default(5),
 });
 

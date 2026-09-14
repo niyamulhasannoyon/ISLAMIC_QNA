@@ -171,4 +171,27 @@ pip install -r requirements.txt
 # Run crawler with incremental pagination
 python3 incremental_scraper.py --source all --max-pages 5
 ```
-# ISLAMIC_QNA
+
+---
+
+## Data Storage & Git Hygiene
+
+Raw scraped datasets (`data/*.json`, total ~96 MB) and local SQLite database files are ignored by git via `.gitignore`. The application queries the local SQLite database (`data/fatwas.db`) directly, or can connect to remote MongoDB Atlas.
+
+### Seeding Data
+- Run `npm run seed` to populate the database if empty.
+- To reseed or force-update existing records: `npm run seed -- --force`.
+- Import custom JSON files: `npm run import:json -- <path-to-file.json>`.
+
+### Purging Large Historical Files from Git History (Optional)
+If you previously cloned this repository when large JSON files were committed and want to reduce the `.git` bundle size:
+```bash
+# Using git-filter-repo (recommended):
+pip install git-filter-repo
+git filter-repo --invert-paths --path data/al_itisam.json --path data/al_kawsar.json --path data/at_tahreek.json
+
+# Or using BFG Repo-Cleaner:
+bfg --delete-files "{al_itisam.json,al_kawsar.json,at_tahreek.json}"
+git reflog expire --expire=now --all && git gc --prune=now --aggressive
+```
+*Note: Rewriting git history modifies past commit SHAs and requires a `git push --force origin <branch>`.*

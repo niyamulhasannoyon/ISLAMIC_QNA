@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFatwaById } from '@/lib/db';
+import { getFatwaByIdAsync } from '@/lib/db';
+import { safeErrorResponse } from '@/lib/apiErrors';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,17 +14,13 @@ export async function GET(
       return NextResponse.json({ error: 'Missing ID parameter' }, { status: 400 });
     }
 
-    const fatwa = getFatwaById(id);
+    const fatwa = await getFatwaByIdAsync(id);
     if (!fatwa) {
       return NextResponse.json({ error: 'Fatwa not found' }, { status: 404 });
     }
 
     return NextResponse.json(fatwa, { status: 200 });
   } catch (error: any) {
-    console.error('Fetch fatwa error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', message: error?.message },
-      { status: 500 }
-    );
+    return safeErrorResponse('Internal server error', 500, error);
   }
 }

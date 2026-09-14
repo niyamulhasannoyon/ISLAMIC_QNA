@@ -1,74 +1,118 @@
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
+import {
+  ADMIN_COOKIE_NAME,
+  ADMIN_SESSION_EXPIRY_SECONDS,
+  AdminSessionPayload,
+  getAuthSecret,
+  getAllowedAdminEmails,
+  isAllowedAdminEmail,
+  getAdminCredentials,
+  verifyAdminCredentials,
+  isAllowedAdmin,
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+} from './authConfig';
 import { getCurrentUserSession } from './userAuth';
+import { createDbSession, findDbSessionByTokenHash, deleteDbSession } from './db';
 
-const ADMIN_COOKIE_NAME = 'is_admin_session';
+export {
+  ADMIN_COOKIE_NAME,
+  ADMIN_SESSION_EXPIRY_SECONDS,
+  getAuthSecret,
+  getAllowedAdminEmails,
+  isAllowedAdminEmail,
+  getAdminCredentials,
+  verifyAdminCredentials,
+  isAllowedAdmin,
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+};
+export type { AdminSessionPayload };
 
-export const ALLOWED_ADMIN_EMAILS = [
-  'niyamulhasanbd@gmail.com',
-  'niyamulhasan1089@gmail.com',
-];
+/**
+ * Sets the admin session HTTP-Only cookie with a DB-backed session record.
+ */
+export async function setAdminSession(identifier: string): Promise<string> {
+  const token = createAdminSessionToken(identifier);
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + ADMIN_SESSION_EXPIRY_SECONDS * 1000).toISOString();
 
-export function isAllowedAdminEmail(email: string): boolean {
-  if (!email) return false;
-  return ALLOWED_ADMIN_EMAILS.includes(email.toLowerCase().trim());
-}
+  try {
+    createDbSession({
+      userId: 'admin:' + identifier,
+      email: identifier,
+      role: 'admin',
+      tokenHash,
+      expiresAt,
+    });
+  } catch (err) {
+    console.error('Failed to create admin DB session:', err);
+  }
 
-export function getAdminCredentials() {
-  const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'admin123';
-  return { username, password };
-}
-
-// Generate a deterministic session token based on credentials + secret
-function generateSessionToken(username: string): string {
-  const secret = process.env.INGESTION_SECRET_TOKEN || 'admin_secret_key_2026';
-  return crypto.createHash('sha256').update(`${username}:${secret}`).digest('hex');
-}
-
-export function verifyAdminCredentials(user: string, pass: string): boolean {
-  const { username, password } = getAdminCredentials();
-  return user.trim() === username && pass.trim() === password;
-}
-
-export async function setAdminSession(username: string): Promise<string> {
-  const token = generateSessionToken(username);
-  const cookieStore = cookies();
-  cookieStore.set(ADMIN_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    path: '/',
-  });
+  try {
+    const cookieStore = cookies();
+    cookieStore.set(ADMIN_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: ADMIN_SESSION_EXPIRY_SECONDS,
+      path: '/',
+    });
+  } catch {
+    // Running outside Next.js request scope (e.g. test scripts)
+  }
   return token;
 }
 
+/**
+ * Checks if the current request is authenticated as an administrator.
+ * Validates either:
+ * 1. An active, valid, non-expired, non-revoked is_admin_session verified against SQLite sessions.
+ * 2. An active, valid, non-expired user session with role === 'admin' and an allowed admin email.
+ */
 export async function isAdminAuthenticated(): Promise<boolean> {
-  // 1. Check direct admin cookie session
-  const cookieStore = cookies();
-  const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
-  if (token) {
-    const { username } = getAdminCredentials();
-    const expectedToken = generateSessionToken(username);
-    if (token === expectedToken) return true;
-
-    // Check if token corresponds to an allowed admin email
-    for (const email of ALLOWED_ADMIN_EMAILS) {
-      if (token === generateSessionToken(email)) return true;
+  try {
+    // 1. Check direct admin cookie session
+    const cookieStore = cookies();
+    const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
+    if (token) {
+      const validAdminPayload = verifyAdminSessionToken(token);
+      if (validAdminPayload) {
+        // Validate active session in database
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const dbSession = findDbSessionByTokenHash(tokenHash);
+        if (dbSession && dbSession.role === 'admin') {
+          return true;
+        }
+      }
     }
-  }
 
-  // 2. Check user session cookie
-  const userSession = await getCurrentUserSession();
-  if (userSession && userSession.role === 'admin' && isAllowedAdminEmail(userSession.email)) {
-    return true;
-  }
+    // 2. Check user session cookie
+    const userSession = await getCurrentUserSession();
+    if (userSession && userSession.role === 'admin' && isAllowedAdmin(userSession.email)) {
+      return true;
+    }
 
-  return false;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
+/**
+ * Clears the admin session cookie and deletes the active session from database.
+ */
 export async function clearAdminSession(): Promise<void> {
-  const cookieStore = cookies();
-  cookieStore.delete(ADMIN_COOKIE_NAME);
+  try {
+    const cookieStore = cookies();
+    const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
+    if (token) {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      deleteDbSession(tokenHash);
+    }
+    cookieStore.delete(ADMIN_COOKIE_NAME);
+  } catch {
+    // Running outside Next.js request scope (e.g. test scripts)
+  }
 }

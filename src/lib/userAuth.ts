@@ -1,78 +1,91 @@
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { OAuth2Client } from "google-auth-library";
 import { User, UserSession } from "@/types/user";
-import { findUserByEmail, findUserById, createOrUpdateUser } from "./db";
-import { setAdminSession } from "./auth";
+import {
+  findUserByEmail,
+  findUserById,
+  createOrUpdateUser,
+  createDbSession,
+  findDbSessionByTokenHash,
+  deleteDbSession,
+  deleteSessionsByUserId,
+} from "./db";
+import {
+  USER_COOKIE_NAME,
+  ADMIN_COOKIE_NAME,
+  USER_SESSION_EXPIRY_SECONDS,
+  ADMIN_SESSION_EXPIRY_SECONDS,
+  getAuthSecret,
+  isAllowedAdmin,
+  createUserSessionToken,
+  parseUserSessionToken,
+  createAdminSessionToken,
+} from "./authConfig";
 
-const USER_COOKIE_NAME = "fatwa_user_session";
-const AUTH_SECRET = process.env.INGESTION_SECRET_TOKEN || "fatwa_archive_jwt_secret_key_2026";
+export {
+  USER_COOKIE_NAME,
+  USER_SESSION_EXPIRY_SECONDS,
+  createUserSessionToken,
+  createUserSessionToken as createSessionToken,
+  parseUserSessionToken,
+  parseUserSessionToken as parseSessionToken,
+};
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const googleAuthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 /**
- * Hash password securely with SHA-256 and salt
+ * Hash password securely with scrypt and per-user random salt (RFC 7914)
  */
 export function hashPassword(password: string): string {
-  return crypto.createHmac("sha256", AUTH_SECRET).update(password).digest("hex");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `scrypt:${salt}:${derivedKey}`;
 }
 
 /**
- * Verify user password
+ * Verify user password supporting modern scrypt and legacy HMAC-SHA256 fallback
  */
 export function verifyPassword(password: string, passwordHash: string): boolean {
-  const hash = hashPassword(password);
-  return hash === passwordHash;
-}
+  if (!password || !passwordHash) return false;
 
-/**
- * Generate a signed session token for user
- */
-function createSessionToken(user: UserSession): string {
-  const payload = JSON.stringify({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    picture: user.picture,
-    role: user.role,
-    provider: user.provider,
-    iat: Date.now(),
-  });
-  const encodedPayload = Buffer.from(payload).toString("base64url");
-  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(encodedPayload).digest("hex");
-  return `${encodedPayload}.${signature}`;
-}
+  if (passwordHash.startsWith("scrypt:")) {
+    const parts = passwordHash.split(":");
+    if (parts.length !== 3) return false;
+    const salt = parts[1];
+    const key = parts[2];
+    const derivedKey = crypto.scryptSync(password, salt, 64).toString("hex");
+    const keyBuffer = Buffer.from(key, "hex");
+    const derivedBuffer = Buffer.from(derivedKey, "hex");
+    if (keyBuffer.length !== derivedBuffer.length) return false;
+    return crypto.timingSafeEqual(keyBuffer, derivedBuffer);
+  }
 
-/**
- * Parse and verify user session token
- */
-export function parseSessionToken(token: string): UserSession | null {
+  // Legacy HMAC-SHA256 fallback for existing credentials
   try {
-    const [encodedPayload, signature] = token.split(".");
-    if (!encodedPayload || !signature) return null;
-
-    const expectedSignature = crypto.createHmac("sha256", AUTH_SECRET).update(encodedPayload).digest("hex");
-    if (signature !== expectedSignature) return null;
-
-    const jsonStr = Buffer.from(encodedPayload, "base64url").toString("utf8");
-    const payload = JSON.parse(jsonStr);
-
-    if (!payload.id || !payload.email) return null;
-
-    return {
-      id: payload.id,
-      email: payload.email,
-      name: payload.name || "User",
-      picture: payload.picture || "",
-      role: payload.role || "user",
-      provider: payload.provider || "credentials",
-    };
-  } catch (err) {
-    return null;
+    let secret = process.env.AUTH_SECRET || process.env.INGESTION_SECRET_TOKEN;
+    if (!secret) {
+      try {
+        secret = getAuthSecret();
+      } catch {
+        secret = 'fatwa_archive_jwt_secret_key_2026';
+      }
+    }
+    const legacyHash = crypto.createHmac("sha256", secret).update(password).digest("hex");
+    const legBuffer = Buffer.from(legacyHash, "hex");
+    const storedBuffer = Buffer.from(passwordHash, "hex");
+    if (legBuffer.length !== storedBuffer.length) return false;
+    return crypto.timingSafeEqual(legBuffer, storedBuffer);
+  } catch {
+    return false;
   }
 }
 
 /**
- * Sets user session HTTP-Only cookie
+ * Sets user session HTTP-Only cookie with a DB-backed session record
  */
-export async function setUserSession(user: User): Promise<void> {
+export async function setUserSession(user: User): Promise<string> {
   const session: UserSession = {
     id: user.id,
     email: user.email,
@@ -81,43 +94,144 @@ export async function setUserSession(user: User): Promise<void> {
     role: user.role,
     provider: user.provider,
   };
-  const token = createSessionToken(session);
+  const token = createUserSessionToken(session);
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + USER_SESSION_EXPIRY_SECONDS * 1000).toISOString();
 
-  const cookieStore = cookies();
-  cookieStore.set(USER_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    path: "/",
-  });
+  // 1. Create DB-backed session record for instant server-side revocation
+  try {
+    createDbSession({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      tokenHash,
+      expiresAt,
+    });
+  } catch (err) {
+    console.error("Failed to create DB user session:", err);
+  }
 
-  // If user is admin, also set admin cookie session
-  if (user.role === "admin") {
-    await setAdminSession(user.email);
+  // 2. Set user session cookie
+  try {
+    const cookieStore = cookies();
+    cookieStore.set(USER_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: USER_SESSION_EXPIRY_SECONDS,
+      path: "/",
+    });
+
+    // If user is admin and authorized, also issue admin session cookie
+    if (user.role === "admin" && isAllowedAdmin(user.email)) {
+      const adminToken = createAdminSessionToken(user.email);
+      const adminTokenHash = crypto.createHash("sha256").update(adminToken).digest("hex");
+      const adminExpiresAt = new Date(Date.now() + ADMIN_SESSION_EXPIRY_SECONDS * 1000).toISOString();
+
+      try {
+        createDbSession({
+          userId: "admin:" + user.email,
+          email: user.email,
+          role: "admin",
+          tokenHash: adminTokenHash,
+          expiresAt: adminExpiresAt,
+        });
+      } catch (adminErr) {
+        console.error("Failed to create DB admin session:", adminErr);
+      }
+
+      cookieStore.set(ADMIN_COOKIE_NAME, adminToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: ADMIN_SESSION_EXPIRY_SECONDS,
+        path: "/",
+      });
+    }
+  } catch {
+    // Running outside Next.js request scope (e.g. CLI or test scripts)
+  }
+
+  return token;
+}
+
+/**
+ * Get current authenticated user session from cookie.
+ * Validates cryptographic signature, expiry, AND database session record.
+ * If session was revoked or user was deleted/banned, returns null immediately.
+ */
+export async function getCurrentUserSession(): Promise<UserSession | null> {
+  try {
+    const cookieStore = cookies();
+    const token = cookieStore.get(USER_COOKIE_NAME)?.value;
+    if (!token) return null;
+
+    // 1. Verify token signature, structure, and expiry
+    const parsed = parseUserSessionToken(token);
+    if (!parsed) return null;
+
+    // 2. Verify active session exists in DB
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const dbSession = findDbSessionByTokenHash(tokenHash);
+    if (!dbSession) {
+      // Session has been revoked, logged out, or expired in database
+      return null;
+    }
+
+    // 3. Ensure user still exists in database and reflect latest status
+    const freshUser = findUserById(dbSession.user_id);
+    if (!freshUser) {
+      return null;
+    }
+
+    return {
+      id: freshUser.id,
+      email: freshUser.email,
+      name: freshUser.name,
+      picture: freshUser.picture || "",
+      role: freshUser.role,
+      provider: freshUser.provider,
+    };
+  } catch {
+    return null;
   }
 }
 
 /**
- * Get current authenticated user session from cookie
- */
-export async function getCurrentUserSession(): Promise<UserSession | null> {
-  const cookieStore = cookies();
-  const token = cookieStore.get(USER_COOKIE_NAME)?.value;
-  if (!token) return null;
-  return parseSessionToken(token);
-}
-
-/**
- * Clear user session cookie
+ * Clear user session: removes session from database and deletes cookie
  */
 export async function clearUserSession(): Promise<void> {
-  const cookieStore = cookies();
-  cookieStore.delete(USER_COOKIE_NAME);
+  try {
+    const cookieStore = cookies();
+    const token = cookieStore.get(USER_COOKIE_NAME)?.value;
+    if (token) {
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      deleteDbSession(tokenHash);
+    }
+    cookieStore.delete(USER_COOKIE_NAME);
+  } catch {
+    // Running outside Next.js request scope
+  }
 }
 
 /**
- * Verify Google ID Token / OAuth Credential Token
+ * Revoke all active sessions for a given user (e.g. account ban, security reset)
+ */
+export function revokeAllSessionsForUser(userId: string): void {
+  deleteSessionsByUserId(userId);
+}
+
+/**
+ * Revoke an individual session by its raw token string
+ */
+export function revokeSessionByToken(token: string): void {
+  if (!token) return;
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  deleteDbSession(tokenHash);
+}
+
+/**
+ * Verify Google ID Token / OAuth Credential Token using Google Auth Library
  */
 export async function verifyGoogleToken(credentialToken: string): Promise<{
   email: string;
@@ -128,41 +242,25 @@ export async function verifyGoogleToken(credentialToken: string): Promise<{
   if (!credentialToken) return null;
 
   try {
-    // 1. First attempt verification via Google TokenInfo API
-    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credentialToken}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.email) {
-        return {
-          email: data.email,
-          name: data.name || data.email.split("@")[0],
-          picture: data.picture || "",
-          sub: data.sub || data.user_id || "",
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("Google tokeninfo API error:", err);
-  }
+    const ticket = await googleAuthClient.verifyIdToken({
+      idToken: credentialToken,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
 
-  // 2. Decode JWT payload directly (for GIS Credential / OAuth ID tokens)
-  try {
-    const parts = credentialToken.split(".");
-    if (parts.length === 3) {
-      const payloadStr = Buffer.from(parts[1], "base64url").toString("utf8");
-      const payload = JSON.parse(payloadStr);
-      if (payload && payload.email) {
-        return {
-          email: payload.email,
-          name: payload.name || payload.given_name || payload.email.split("@")[0],
-          picture: payload.picture || "",
-          sub: payload.sub || "",
-        };
-      }
+    if (!payload || !payload.email || !payload.email_verified) {
+      console.warn("Google token verification failed: email missing or not verified");
+      return null;
     }
-  } catch (decodeErr) {
-    console.warn("Google token decoding error:", decodeErr);
-  }
 
-  return null;
+    return {
+      email: payload.email,
+      name: payload.name || payload.given_name || payload.email.split("@")[0],
+      picture: payload.picture || "",
+      sub: payload.sub,
+    };
+  } catch (error) {
+    console.error("Google token verification error:", error);
+    return null;
+  }
 }

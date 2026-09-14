@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  findUserByEmail,
-  createOrUpdateUser,
+  findUserByEmailAsync,
+  createOrUpdateUserAsync,
 } from "@/lib/db";
 import {
   hashPassword,
@@ -10,6 +10,8 @@ import {
   clearUserSession,
   getCurrentUserSession,
 } from "@/lib/userAuth";
+
+import { safeErrorResponse } from "@/lib/apiErrors";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const existingUser = findUserByEmail(email);
+      const existingUser = await findUserByEmailAsync(email);
       if (existingUser && existingUser.password_hash) {
         return NextResponse.json(
           { error: "এই ইমেইল দিয়ে ইতিমধ্যে একটি একাউন্ট খোলা আছে। লগইন করুন।" },
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
       }
 
       const password_hash = hashPassword(password);
-      const user = createOrUpdateUser({
+      const user = await createOrUpdateUserAsync({
         email,
         name,
         password_hash,
@@ -89,7 +91,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const user = findUserByEmail(email);
+      const user = await findUserByEmailAsync(email);
       if (!user || !user.password_hash) {
         return NextResponse.json(
           { error: "ভুল ইমেইল অথবা পাসওয়ার্ড" },
@@ -103,6 +105,22 @@ export async function POST(req: NextRequest) {
           { error: "ভুল ইমেইল অথবা পাসওয়ার্ড" },
           { status: 401 }
         );
+      }
+
+      // Upgrade legacy password hash to modern scrypt hash automatically
+      if (!user.password_hash.startsWith("scrypt:")) {
+        try {
+          const modernHash = hashPassword(password);
+          await createOrUpdateUserAsync({
+            email: user.email,
+            name: user.name,
+            password_hash: modernHash,
+            role: user.role,
+            provider: user.provider,
+          });
+        } catch (upgradeErr) {
+          console.warn("[Auth] Password hash upgrade warning:", upgradeErr);
+        }
       }
 
       await setUserSession(user);
@@ -121,9 +139,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: "Authentication failed", message: error?.message },
-      { status: 500 }
-    );
+    return safeErrorResponse("Authentication failed", 500, error);
   }
 }

@@ -37,7 +37,11 @@ export function getSearchEngine(): SearchEngine {
  */
 export async function searchFatwas(options: SearchQueryOptions): Promise<SearchResponse> {
   const engine = getSearchEngine();
-  return engine.search(options);
+  const safeOptions: SearchQueryOptions = {
+    ...options,
+    q: (options.q || '').slice(0, 500),
+  };
+  return engine.search(safeOptions);
 }
 
 /**

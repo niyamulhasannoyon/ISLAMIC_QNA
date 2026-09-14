@@ -1,4 +1,4 @@
-import { batchUpsertFatwas, closeDb } from '../lib/db';
+import { batchUpsertFatwas, closeDb, getFatwaCount } from '../lib/db';
 import { computeFatwaHash } from '../lib/hash';
 import { IngestItemInput, FatwaSource } from '../types/fatwa';
 import { runImport } from './import-json';
@@ -104,6 +104,15 @@ const INITIAL_FATWAS: Array<Omit<IngestItemInput, 'sha256_hash' | 'hash'> & { so
 
 async function seed() {
   try {
+    const isForce = process.argv.includes('--force');
+    const existingCount = getFatwaCount();
+
+    if (existingCount > 0 && !isForce) {
+      console.log(`[Seed Script]: Database already contains ${existingCount} fatwa records.`);
+      console.log('[Seed Script]: Skipping seed. (Use "npm run seed -- --force" to re-seed anyway)');
+      return;
+    }
+
     console.log('Seeding SQLite database with authentic Fatwa records...');
     const items: IngestItemInput[] = INITIAL_FATWAS.map((item) => {
       const sha256_hash = computeFatwaHash({

@@ -2,7 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getFatwaById, getRelatedFatwas } from "@/lib/db";
+import { getFatwaById, getFatwaByIdAsync, getRelatedFatwas } from "@/lib/db";
 import { formatDate, cn, getSiteUrl, createFatwaSlug } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { FatwaDetailHeader } from "@/components/FatwaDetailHeader";
@@ -34,9 +34,9 @@ interface Props {
 async function fetchFatwaResilient(id: string): Promise<FatwaQA | null> {
   if (!id) return null;
 
-  // 1. Direct local database query (supports deterministic ID, legacy alias, or sha256_hash)
+  // 1. Direct database query (supports MongoDB Atlas if configured, and local SQLite)
   try {
-    const local = getFatwaById(id);
+    const local = await getFatwaByIdAsync(id);
     if (local) return local;
   } catch (err) {
     console.warn("[FatwaPage] local getFatwaById lookup error:", err);

@@ -1,4 +1,7 @@
 import { MongoClient, Db } from 'mongodb';
+import { User } from '@/types/user';
+import { FatwaQA, IngestItemInput, IngestResultItem, SearchFacets, FatwaSource } from '@/types/fatwa';
+import { computeFatwaHash, hashToUuid, normalizeText } from '../hash';
 
 const uri = process.env.MONGODB_URI;
 
@@ -8,6 +11,10 @@ let clientPromise: Promise<MongoClient> | null = null;
 declare global {
   // eslint-disable-next-line no-var
   var _mongoClientPromise: Promise<MongoClient> | undefined;
+}
+
+export function isMongoConfigured(): boolean {
+  return Boolean(process.env.MONGODB_URI && process.env.MONGODB_URI.trim().length > 0);
 }
 
 export function getMongoClientPromise(): Promise<MongoClient> | null {
@@ -39,6 +46,320 @@ export function getMongoClientPromise(): Promise<MongoClient> | null {
 export async function getMongoDb(dbName: string = 'fatwas_db'): Promise<Db | null> {
   const promise = getMongoClientPromise();
   if (!promise) return null;
-  const client = await promise;
-  return client.db(dbName);
+  const c = await promise;
+  return c.db(dbName);
+}
+
+// -------------------------------------------------------------
+// USER DAO (MongoDB Atlas)
+// -------------------------------------------------------------
+
+export async function findUserByEmailMongo(email: string): Promise<User | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const doc = await db.collection('users').findOne({ email: email.toLowerCase().trim() });
+  if (!doc) return null;
+
+  return {
+    id: doc.id || String(doc._id),
+    email: doc.email,
+    name: doc.name,
+    picture: doc.picture || '',
+    password_hash: doc.password_hash || '',
+    role: doc.role || 'user',
+    provider: doc.provider || 'credentials',
+    created_at: doc.created_at || new Date().toISOString(),
+    updated_at: doc.updated_at || new Date().toISOString(),
+  };
+}
+
+export async function findUserByIdMongo(id: string): Promise<User | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const doc = await db.collection('users').findOne({ $or: [{ id }, { _id: id as any }] });
+  if (!doc) return null;
+
+  return {
+    id: doc.id || String(doc._id),
+    email: doc.email,
+    name: doc.name,
+    picture: doc.picture || '',
+    password_hash: doc.password_hash || '',
+    role: doc.role || 'user',
+    provider: doc.provider || 'credentials',
+    created_at: doc.created_at || new Date().toISOString(),
+    updated_at: doc.updated_at || new Date().toISOString(),
+  };
+}
+
+export async function createOrUpdateUserMongo(userData: {
+  email: string;
+  name: string;
+  picture?: string;
+  password_hash?: string;
+  role?: 'user' | 'admin';
+  provider?: 'credentials' | 'google';
+}): Promise<User> {
+  const db = await getMongoDb();
+  if (!db) throw new Error('MongoDB is not configured');
+
+  const collection = db.collection('users');
+  await collection.createIndex({ email: 1 }, { unique: true });
+
+  const email = userData.email.toLowerCase().trim();
+  const now = new Date().toISOString();
+
+  const existing = await collection.findOne({ email });
+
+  if (existing) {
+    const updated = {
+      name: userData.name,
+      picture: userData.picture !== undefined ? userData.picture : existing.picture || '',
+      password_hash: userData.password_hash !== undefined ? userData.password_hash : existing.password_hash || '',
+      role: userData.role || existing.role || 'user',
+      provider: userData.provider || existing.provider || 'credentials',
+      updated_at: now,
+    };
+
+    await collection.updateOne({ email }, { $set: updated });
+
+    return {
+      id: existing.id || String(existing._id),
+      email,
+      ...updated,
+      created_at: existing.created_at || now,
+    };
+  }
+
+  const userId = crypto.randomUUID();
+  const newUser: User = {
+    id: userId,
+    email,
+    name: userData.name,
+    picture: userData.picture || '',
+    password_hash: userData.password_hash || '',
+    role: userData.role || 'user',
+    provider: userData.provider || 'credentials',
+    created_at: now,
+    updated_at: now,
+  };
+
+  await collection.insertOne({
+    _id: userId as any,
+    ...newUser,
+  });
+
+  return newUser;
+}
+
+// -------------------------------------------------------------
+// FATWA DAO (MongoDB Atlas)
+// -------------------------------------------------------------
+
+function mapMongoFatwaDoc(doc: any): FatwaQA {
+  return {
+    id: doc.id || String(doc._id),
+    source: doc.source as FatwaSource,
+    source_url: doc.source_url || '',
+    title: doc.title || '',
+    question: doc.question || '',
+    answer: doc.answer || '',
+    category: doc.category || 'General',
+    tags: Array.isArray(doc.tags) ? doc.tags : [],
+    scholar: doc.scholar || '',
+    published_date: doc.published_date || doc.created_at || '',
+    sha256_hash: doc.sha256_hash || '',
+    scraped_at: doc.scraped_at || '',
+    created_at: doc.created_at || new Date().toISOString(),
+    updated_at: doc.updated_at || new Date().toISOString(),
+  };
+}
+
+export async function getFatwaByIdMongo(idOrHash: string): Promise<FatwaQA | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const collection = db.collection('fatwas');
+  const clean = idOrHash.trim();
+
+  // Try id, _id, or sha256_hash
+  const doc = await collection.findOne({
+    $or: [
+      { id: clean },
+      { _id: clean as any },
+      { sha256_hash: clean.toLowerCase() },
+    ],
+  });
+
+  if (!doc) return null;
+  return mapMongoFatwaDoc(doc);
+}
+
+export async function upsertFatwaMongo(item: IngestItemInput): Promise<IngestResultItem> {
+  const db = await getMongoDb();
+  if (!db) throw new Error('MongoDB is not configured');
+
+  const collection = db.collection('fatwas');
+  await collection.createIndex({ sha256_hash: 1 }, { unique: true });
+  await collection.createIndex({ source_url: 1 });
+  await collection.createIndex({ source: 1, published_date: -1 });
+
+  const question = item.question.trim();
+  const answer = item.answer.trim();
+  const sha256_hash = (item.sha256_hash || computeFatwaHash({ question, answer })).toLowerCase();
+  const id = item.id || hashToUuid(sha256_hash);
+  const now = new Date().toISOString();
+
+  const existing = await collection.findOne({ sha256_hash });
+
+  if (existing) {
+    const hasChanged =
+      existing.title !== item.title ||
+      existing.category !== item.category ||
+      existing.scholar !== item.scholar ||
+      existing.source_url !== item.source_url;
+
+    if (hasChanged) {
+      await collection.updateOne(
+        { sha256_hash },
+        {
+          $set: {
+            title: item.title,
+            category: item.category || 'General',
+            tags: item.tags || [],
+            scholar: item.scholar || '',
+            source_url: item.source_url,
+            published_date: item.published_date || existing.published_date,
+            updated_at: now,
+          },
+        }
+      );
+      return { id: existing.id || String(existing._id), sha256_hash, status: 'updated' };
+    }
+    return { id: existing.id || String(existing._id), sha256_hash, status: 'skipped' };
+  }
+
+  await collection.insertOne({
+    _id: id as any,
+    id,
+    source: item.source,
+    source_url: item.source_url,
+    title: item.title,
+    question,
+    answer,
+    category: item.category || 'General',
+    tags: item.tags || [],
+    scholar: item.scholar || '',
+    published_date: item.published_date || now,
+    sha256_hash,
+    scraped_at: item.scraped_at || now,
+    created_at: item.published_date || now,
+    updated_at: now,
+  });
+
+  return { id, sha256_hash, status: 'inserted' };
+}
+
+export async function deleteFatwaMongo(id: string): Promise<boolean> {
+  const db = await getMongoDb();
+  if (!db) return false;
+
+  const res = await db.collection('fatwas').deleteOne({
+    $or: [{ id }, { _id: id as any }],
+  });
+
+  return (res.deletedCount || 0) > 0;
+}
+
+export async function listFatwasMongo(options: {
+  q?: string;
+  source?: string;
+  category?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ items: FatwaQA[]; total: number }> {
+  const db = await getMongoDb();
+  if (!db) return { items: [], total: 0 };
+
+  const collection = db.collection('fatwas');
+  const filter: any = {};
+
+  if (options.q) {
+    const regex = new RegExp(options.q, 'i');
+    filter.$or = [{ title: regex }, { question: regex }, { scholar: regex }];
+  }
+
+  if (options.source && options.source !== 'All') {
+    filter.source = options.source;
+  }
+
+  if (options.category && options.category !== 'All') {
+    filter.category = options.category;
+  }
+
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 15));
+  const skip = (page - 1) * limit;
+
+  const total = await collection.countDocuments(filter);
+  const docs = await collection
+    .find(filter)
+    .sort({ published_date: -1, created_at: -1 })
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+
+  return {
+    items: docs.map(mapMongoFatwaDoc),
+    total,
+  };
+}
+
+export async function getFatwaCountMongo(): Promise<number> {
+  const db = await getMongoDb();
+  if (!db) return 0;
+  return db.collection('fatwas').estimatedDocumentCount();
+}
+
+export async function getFacetsMongo(): Promise<SearchFacets> {
+  const db = await getMongoDb();
+  if (!db) {
+    return { sources: [], categories: [], scholars: [] };
+  }
+
+  const collection = db.collection('fatwas');
+
+  const [sources, categories, scholars] = await Promise.all([
+    collection
+      .aggregate([
+        { $group: { _id: '$source', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $project: { name: '$_id', count: 1, _id: 0 } },
+      ])
+      .toArray(),
+    collection
+      .aggregate([
+        { $group: { _id: '$category', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $project: { name: '$_id', count: 1, _id: 0 } },
+      ])
+      .toArray(),
+    collection
+      .aggregate([
+        { $match: { scholar: { $ne: '' } } },
+        { $group: { _id: '$scholar', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 50 },
+        { $project: { name: '$_id', count: 1, _id: 0 } },
+      ])
+      .toArray(),
+  ]);
+
+  return {
+    sources: sources as { name: string; count: number }[],
+    categories: categories as { name: string; count: number }[],
+    scholars: scholars as { name: string; count: number }[],
+  };
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { RAGQuerySchema } from '@/lib/db/schema';
 import { generateRAGAnswer } from '@/lib/ai/rag';
 
+import { safeErrorResponse } from '@/lib/apiErrors';
+
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
@@ -21,10 +23,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(ragResult);
   } catch (err: any) {
-    console.error('RAG API Error:', err);
-    return NextResponse.json(
-      { error: 'Failed to generate RAG response', message: err?.message },
-      { status: 500 }
-    );
+    return safeErrorResponse('Failed to generate RAG response', 500, err);
   }
 }

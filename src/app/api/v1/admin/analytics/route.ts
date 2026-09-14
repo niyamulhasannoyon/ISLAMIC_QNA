@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminAuthenticated } from '@/lib/auth';
 import { getAnalyticsOverview } from '@/lib/analytics';
+import { safeErrorResponse } from '@/lib/apiErrors';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,6 @@ export async function GET(req: NextRequest) {
     const analytics = getAnalyticsOverview(timeframe);
     return NextResponse.json(analytics);
   } catch (error: any) {
-    console.error('[Admin Analytics API Error]:', error);
-    return NextResponse.json({ error: 'Failed to load analytics', message: error?.message }, { status: 500 });
+    return safeErrorResponse('Failed to load analytics', 500, error);
   }
 }

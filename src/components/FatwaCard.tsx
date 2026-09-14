@@ -6,6 +6,7 @@ import { SearchResultItem } from "@/types/fatwa";
 import { formatDate, cn, createFatwaSlug } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
 import { buildCacheKey, saveScrollPosition } from "@/lib/searchCache";
+import { SafeHighlight } from "./SafeHighlight";
 import {
   ExternalLink,
   Copy,
@@ -155,15 +156,16 @@ export function FatwaCard({ item, onOpenModal }: FatwaCardProps) {
           href={`/fatwa/${fatwaSlug}`}
           onClick={handleLinkClick}
           className="hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors block"
-          dangerouslySetInnerHTML={{ __html: item.titleSnippet || item.title }}
-        />
+        >
+          <SafeHighlight text={item.titleSnippet || item.title} />
+        </Link>
       </h2>
 
 
       {/* Contextual Snippet with search-term highlighting (collapsed state) */}
       {!isExpanded && (
         <div className="text-sm text-zinc-600 dark:text-zinc-300 font-bengali leading-relaxed line-clamp-3">
-          <span dangerouslySetInnerHTML={{ __html: item.snippet }} />
+          <SafeHighlight text={item.snippet} />
         </div>
       )}
 

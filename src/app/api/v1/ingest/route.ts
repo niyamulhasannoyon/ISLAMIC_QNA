@@ -4,6 +4,8 @@ import { syncFatwaBatch } from '@/lib/pipeline/ingest';
 import { refreshSearchIndex } from '@/lib/search';
 import { IngestItemInput } from '@/types/fatwa';
 import { computeFatwaHash, isValidSha256 } from '@/lib/hash';
+import { safeErrorResponse } from '@/lib/apiErrors';
+import { sanitizeFatwaInput } from '@/lib/sanitizer';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,12 +99,13 @@ export async function POST(req: NextRequest) {
     }
 
     const validatedItems: IngestItemInput[] = rawItems.map((item) => {
+      const sanitized = sanitizeFatwaInput(item);
       const computedHash = computeFatwaHash({
-        question: item.question,
-        answer: item.answer,
+        question: sanitized.question || '',
+        answer: sanitized.answer || '',
       });
 
-      const providedHash = item.sha256_hash || item.hash;
+      const providedHash = sanitized.sha256_hash || (sanitized as any).hash;
       let finalHash = computedHash;
 
       if (providedHash && isValidSha256(providedHash)) {
@@ -110,17 +113,17 @@ export async function POST(req: NextRequest) {
       }
 
       return {
-        source: item.source,
-        source_url: item.source_url,
-        title: item.title,
-        question: item.question,
-        answer: item.answer,
-        category: item.category || 'General',
-        tags: item.tags || [],
-        scholar: item.scholar || '',
-        published_date: item.published_date || item.createdAt || new Date().toISOString(),
+        source: sanitized.source,
+        source_url: sanitized.source_url || '',
+        title: sanitized.title || '',
+        question: sanitized.question || '',
+        answer: sanitized.answer || '',
+        category: sanitized.category || 'General',
+        tags: sanitized.tags || [],
+        scholar: sanitized.scholar || '',
+        published_date: sanitized.published_date || (sanitized as any).createdAt || new Date().toISOString(),
         sha256_hash: finalHash,
-        scraped_at: item.scraped_at || new Date().toISOString(),
+        scraped_at: sanitized.scraped_at || new Date().toISOString(),
       };
     });
 
@@ -141,10 +144,6 @@ export async function POST(req: NextRequest) {
       message: `Processed ${batchResult.total} items via ${batchResult.storage} (inserted: ${batchResult.inserted}, updated: ${batchResult.updated}, skipped: ${batchResult.skipped})`,
     });
   } catch (error: any) {
-    console.error('Ingestion error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error during ingestion', message: error?.message },
-      { status: 500 }
-    );
+    return safeErrorResponse('Internal server error during ingestion', 500, error);
   }
 }
