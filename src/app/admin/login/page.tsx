@@ -42,8 +42,7 @@ export default function AdminLoginPage() {
         router.push('/admin');
         router.refresh();
       } else {
-        router.push('/');
-        router.refresh();
+        setError('অননুমোদিত এডমিন একাউন্ট। শুধুমাত্র অনুমোদিত এডমিন ইমেইল (niyamulhasanbd@gmail.com / niyamulhasan1089@gmail.com) দিয়ে লগইন করুন।');
       }
     } catch (err: any) {
       setError(err?.message || 'গুগল সাইন-ইন সম্পন্ন করা যায়নি।');
@@ -51,6 +50,32 @@ export default function AdminLoginPage() {
       setGoogleLoading(false);
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    const checkExistingAuth = async () => {
+      try {
+        const res = await fetch('/api/v1/admin/auth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-requested-with': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({ action: 'check' }),
+        });
+        const data = await res.json();
+        if (active && data.authenticated) {
+          router.replace('/admin');
+        }
+      } catch {
+        // Silently ignore check failure
+      }
+    };
+    checkExistingAuth();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     const clientId =
@@ -139,6 +164,10 @@ export default function AdminLoginPage() {
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
               ইসলামিক ফতোয়া ও গবেষণা প্ল্যাটফর্ম কন্ট্রোল প্যানেল
             </p>
+            <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 text-[11px] text-emerald-800 dark:text-emerald-300">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>শুধুমাত্র অনুমোদিত এডমিন একাউন্ট প্রযোজ্য</span>
+            </div>
           </div>
 
           {/* Error Alert */}

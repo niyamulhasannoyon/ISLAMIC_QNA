@@ -52,18 +52,29 @@ export function getAuthSecret(): string {
 }
 
 /**
+ * Strictly authorized admin emails allowed to access the admin panel:
+ * - niyamulhasanbd@gmail.com
+ * - niyamulhasan1089@gmail.com
+ */
+export const ALLOWED_ADMIN_EMAILS: readonly string[] = [
+  'niyamulhasanbd@gmail.com',
+  'niyamulhasan1089@gmail.com',
+];
+
+/**
  * Dynamically resolves allowed admin emails from ADMIN_EMAILS environment variable.
- * Prevents hardcoding personal email addresses in public source code.
+ * Fallbacks to ALLOWED_ADMIN_EMAILS if environment variable is missing or empty.
  */
 export function getAllowedAdminEmails(): string[] {
   const envEmails = process.env.ADMIN_EMAILS;
   if (!envEmails || envEmails.trim().length === 0) {
-    return [];
+    return [...ALLOWED_ADMIN_EMAILS];
   }
-  return envEmails
+  const configured = envEmails
     .split(',')
     .map((email) => email.toLowerCase().trim())
     .filter(Boolean);
+  return configured.length > 0 ? configured : [...ALLOWED_ADMIN_EMAILS];
 }
 
 /**
