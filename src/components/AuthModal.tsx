@@ -12,7 +12,50 @@ interface AuthModalProps {
   isAdminMode?: boolean;
 }
 
-export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: AuthModalProps) {
+class AuthModalErrorBoundary extends React.Component<
+  { children: React.ReactNode; onClose: () => void },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; onClose: () => void }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("AuthModal internal error caught:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75">
+          <div className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-sm w-full text-center font-bengali">
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+              লগইন উইন্ডো লোড করতে সমস্যা হয়েছে। অনুগ্রহ করে পৃষ্ঠাটি রিফ্রেশ করুন।
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false });
+                this.props.onClose();
+              }}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl"
+            >
+              বন্ধ করুন
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AuthModalDialog({ isOpen, onClose, onSuccess, isAdminMode = false }: AuthModalProps) {
   const [mounted, setMounted] = useState(false);
   const [tab, setTab] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
@@ -61,8 +104,6 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
-
-  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,6 +230,8 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
       isMounted = false;
     };
   }, [isOpen]);
+
+  if (!isOpen || !mounted) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto font-bengali">
@@ -370,6 +413,16 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
       </div>
     </div>,
     document.body
+  );
+}
+
+export function AuthModal(props: AuthModalProps) {
+  if (!props.isOpen) return null;
+
+  return (
+    <AuthModalErrorBoundary onClose={props.onClose}>
+      <AuthModalDialog {...props} />
+    </AuthModalErrorBoundary>
   );
 }
 
