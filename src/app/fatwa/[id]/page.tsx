@@ -2,7 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getFatwaById, getFatwaByIdAsync, getRelatedFatwas } from "@/lib/db";
+import { getFatwaById, getFatwaByIdAsync, getRelatedFatwasAsync } from "@/lib/db";
 import { formatDate, cn, getSiteUrl, createFatwaSlug } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { FatwaDetailHeader } from "@/components/FatwaDetailHeader";
@@ -173,7 +173,7 @@ export default async function FatwaPage({ params }: Props) {
   }
 
   const siteUrl = getSiteUrl();
-  const relatedFatwas = getRelatedFatwas(fatwa.category, fatwa.id, 5);
+  const relatedFatwas = await getRelatedFatwasAsync(fatwa.category, fatwa.id, 5);
   const fatwaSlug = createFatwaSlug(fatwa.title, fatwa.id);
   const canonicalUrl = `${siteUrl}/fatwa/${fatwaSlug}`;
 

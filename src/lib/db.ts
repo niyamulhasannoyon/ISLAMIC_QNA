@@ -750,6 +750,72 @@ export function getRelatedFatwas(
   return rows;
 }
 
+export async function getRelatedFatwasAsync(
+  category: string,
+  currentId: string,
+  limit: number = 5
+): Promise<
+  Array<{
+    id: string;
+    title: string;
+    category: string;
+    source: FatwaSource;
+    scholar: string;
+    published_date: string;
+  }>
+> {
+  if (isMongoConfigured()) {
+    try {
+      const { getMongoDb } = await import('./db/mongodb');
+      const db = await getMongoDb();
+      if (db) {
+        const collection = db.collection('fatwas');
+        const docs = await collection
+          .find({ category, id: { $ne: currentId } })
+          .sort({ published_date: -1 })
+          .limit(limit)
+          .toArray();
+
+        const items = docs.map((d: any) => ({
+          id: d.id || String(d._id),
+          title: d.title || '',
+          category: d.category || '',
+          source: d.source as FatwaSource,
+          scholar: d.scholar || '',
+          published_date: d.published_date || '',
+        }));
+
+        if (items.length < limit) {
+          const existingIds = [currentId, ...items.map((r) => r.id)];
+          const remaining = limit - items.length;
+          const fallbacks = await collection
+            .find({ id: { $nin: existingIds } })
+            .sort({ published_date: -1 })
+            .limit(remaining)
+            .toArray();
+
+          const fallbackItems = fallbacks.map((d: any) => ({
+            id: d.id || String(d._id),
+            title: d.title || '',
+            category: d.category || '',
+            source: d.source as FatwaSource,
+            scholar: d.scholar || '',
+            published_date: d.published_date || '',
+          }));
+
+          return [...items, ...fallbackItems];
+        }
+
+        return items;
+      }
+    } catch (err) {
+      console.warn('[MongoDB getRelatedFatwasAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+
+  return getRelatedFatwas(category, currentId, limit);
+}
+
 import { User } from '@/types/user';
 
 export function findUserByEmail(email: string): User | null {

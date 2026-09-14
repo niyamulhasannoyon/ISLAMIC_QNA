@@ -12,13 +12,13 @@ declare global {
 }
 
 export function createSearchEngine(): SearchEngine {
-  const provider = (process.env.SEARCH_ENGINE || 'local').toLowerCase();
+  const provider = (process.env.SEARCH_ENGINE || (process.env.MONGODB_URI ? 'mongodb' : 'local')).toLowerCase();
 
   if (provider === 'meilisearch' && process.env.MEILISEARCH_HOST) {
     return new MeilisearchEngine();
   }
 
-  if (provider === 'mongodb' && process.env.MONGODB_URI) {
+  if (provider === 'mongodb' || process.env.MONGODB_URI) {
     return new MongoAtlasSearchEngine();
   }
 
