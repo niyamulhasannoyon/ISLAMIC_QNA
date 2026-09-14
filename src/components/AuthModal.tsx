@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, ShieldCheck } from "lucide-react";
+import { X, Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, ShieldCheck, AlertTriangle } from "lucide-react";
 import { UserSession } from "@/types/user";
 
 interface AuthModalProps {
@@ -21,6 +21,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
+  const [blockedNotice, setBlockedNotice] = useState(false);
   const [error, setError] = useState("");
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
@@ -155,7 +156,10 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
             });
           }
 
-          if (isMounted) setGoogleReady(true);
+          if (isMounted) {
+            setGoogleReady(true);
+            setBlockedNotice(false);
+          }
           return true;
         } catch (e) {
           console.error("Google AuthModal init error:", e);
@@ -168,7 +172,12 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
       const interval = setInterval(() => {
         if (setupGoogle()) clearInterval(interval);
       }, 200);
-      const timeout = setTimeout(() => clearInterval(interval), 3000);
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        if (isMounted && !googleReady) {
+          setBlockedNotice(true);
+        }
+      }, 3500);
       return () => {
         isMounted = false;
         clearInterval(interval);
@@ -251,6 +260,16 @@ export function AuthModal({ isOpen, onClose, onSuccess, isAdminMode = false }: A
           <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* Adblocker / Script blocked notice */}
+        {blockedNotice && !googleReady && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <span className="leading-relaxed">
+              গুগল সাইন-ইন সার্ভিস লোড করা যায়নি। অনুগ্রহ করে আপনার ব্রাউজারের Adblocker বা ট্র্যাকিং প্রতিরোধ সাময়িকভাবে বন্ধ করে পেজটি রিফ্রেশ করুন।
+            </span>
           </div>
         )}
 
