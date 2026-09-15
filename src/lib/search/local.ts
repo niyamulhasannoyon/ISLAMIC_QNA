@@ -651,7 +651,29 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         }
       }
 
-      if (queryTokens.length > 0) {
+      if (queryTokens.length >= 2) {
+        if (matchedTokensCount >= queryTokens.length) {
+          score += 340.0;
+        } else if (matchedTokensCount >= 2) {
+          score += (matchedTokensCount / queryTokens.length) * 200.0;
+        } else if (matchedTokensCount <= 1) {
+          score *= 0.4;
+        }
+
+        // Primary Subject relevance enforcement:
+        // If the query has multiple tokens (e.g. 'রোজা ভাঙার', 'সালাতের সময়', 'ওযুর নিয়ম', 'দাড়ি কাটা'),
+        // ensure that the primary topic token is represented in the fatwa.
+        const primarySubject = queryTokens[0];
+        if (primarySubject && primarySubject.length >= 2 && !isStopWord(primarySubject)) {
+          const subjectSyns = getSynonymsAndVariants(primarySubject);
+          const hasSubjectInDoc = subjectSyns.some((s) =>
+            titleLower.includes(s) || questionLower.includes(s) || answerLower.includes(s)
+          );
+          if (!hasSubjectInDoc) {
+            score *= 0.15;
+          }
+        }
+      } else if (queryTokens.length === 1) {
         const coverageRatio = matchedTokensCount / queryTokens.length;
         score += coverageRatio * 90.0;
       }

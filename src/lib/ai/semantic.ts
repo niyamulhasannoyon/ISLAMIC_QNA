@@ -217,8 +217,29 @@ export function getDeterministicFiqhFallback(rawQuery: string): FiqhSemanticAnal
     };
   }
 
-  // 3. Sawm & Medical Issues: Injections, Inhaler, Saline
-  if (/(ইনজেকশন|ইনহেলার|স্যালাইন|ইনসুলিন|ভ্যাকসিন|চোখে\s*ড্রপ|রোজার.*ভেঙ্গে|রোযা.*ভঙ্গ)/iu.test(q)) {
+  // 3. Sawm & Medical Issues: Injections, Inhaler, Saline, Breaking Fast
+  if (/(রো[জয][াে].*(?:ভাঙ|ভাঙ্গ|ভঙ্গ|নষ্ট|ভেঙ্গ|ভেঙে)|সিয়াম.*(?:নষ্ট|ভঙ্গ|ভাঙ)|রোজার.*ভেঙ্গে|রোযা.*ভঙ্গ)/iu.test(q) || /(roja|roza|siam|siyam).*(?:vanga|vangar|vange|bhanga|bhangar|bhenge)/iu.test(q)) {
+    const technical_fiqh_terms = ['রোজা ভঙ্গ', 'সিয়াম নষ্ট', 'রোজা ভাঙার কারণ', 'কাযা', 'কাফফারা', 'রোযা'];
+    const expanded_keywords = ['রোজা ভঙ্গের কারণ', 'রোযা নষ্টের কারণ', 'কী কী কারণে রোজা ভাঙে', 'রোজা ভেঙে গেলে করণীয়'];
+    return {
+      fiqh_intent: 'রোজা ভঙ্গের কারণসমূহ এবং রোজা নষ্ট হলে কাযা ও কাফফারার শারয়ী বিধান।',
+      fiqh_category: 'Sawm (Fasting)',
+      technical_fiqh_terms,
+      expanded_keywords,
+      optimized_search_query: `${rawQuery} রোজা ভঙ্গের কারণ রোযা নষ্ট সিয়াম ভঙ্গ কাযা কাফফারা`,
+      canonicalBengali: 'রোজা ভঙ্গের কারণ ও কাযার শারয়ী বিধান',
+      coreSubject: 'রোজা',
+      coreAspect: 'রোজা ভঙ্গ',
+      essentialKeywords: ['রোজা', 'ভঙ্গ', 'ভাঙা'],
+      fiqhConcepts: technical_fiqh_terms,
+      primarySubject: 'রোজা',
+      primaryAction: 'ভঙ্গ',
+      fiqhTerms: technical_fiqh_terms,
+      mustInclude: ['রোজা'],
+    };
+  }
+
+  if (/(ইনজেকশন|ইনহেলার|স্যালাইন|ইনসুলিন|ভ্যাকসিন|চোখে\s*ড্রপ)/iu.test(q)) {
     const technical_fiqh_terms = ['রোজা ভঙ্গ', 'সিয়াম নষ্ট', 'ইনজেকশন', 'ইনহেলার', 'স্যালাইন', 'কাযা', 'কাফফারা'];
     const expanded_keywords = ['রোযা অবস্থায় ইনজেকশন', 'ইনহেলার নিলে কি রোজা ভাঙ্গে', 'ইনসুলিন ও রোজা', 'স্যালাইন গ্রহণ'];
     return {
@@ -236,6 +257,72 @@ export function getDeterministicFiqhFallback(rawQuery: string): FiqhSemanticAnal
       primaryAction: 'ইনজেকশন',
       fiqhTerms: technical_fiqh_terms,
       mustInclude: ['রোজা'],
+    };
+  }
+
+  // 3b. Prayer Concentration & Focus
+  if (/(নামাজ|সালাত).*(?:মনোযোগ|একাগ্রতা|খুশু|খুজু)/iu.test(q) || /(namaj|salat).*(?:montojog|monojog|khushu)/iu.test(q)) {
+    const technical_fiqh_terms = ['সালাতে মনোযোগ', 'নামাজে একাগ্রতা', 'খুশু', 'খুজু', 'ওয়াসওয়াসা', 'নামাজে খারাপ চিন্তা'];
+    const expanded_keywords = ['নামাজে মন বসানোর উপায়', 'সালাতে মনোযোগ বৃদ্ধির দোয়া', 'নামাজে শয়তানের কুমন্ত্রণা'];
+    return {
+      fiqh_intent: 'সালাতে একাগ্রতা ও মনোযোগ (খুশু-খুজু) অর্জনের উপায় এবং শয়তানের ওয়াসওয়াসা দূর করার শারয়ী নির্দেশনা।',
+      fiqh_category: 'Salah',
+      technical_fiqh_terms,
+      expanded_keywords,
+      optimized_search_query: `${rawQuery} সালাতে মনোযোগ নামাজে একাগ্রতা খুশু খুজু ওয়াসওয়াসা শয়তানের কুমন্ত্রণা`,
+      canonicalBengali: 'সালাতে মনোযোগ ও একাগ্রতা অর্জনের বিধান',
+      coreSubject: 'সালাত',
+      coreAspect: 'মনোযোগ',
+      essentialKeywords: ['সালাত', 'মনোযোগ', 'খুশু'],
+      fiqhConcepts: technical_fiqh_terms,
+      primarySubject: 'সালাত',
+      primaryAction: 'মনোযোগ',
+      fiqhTerms: technical_fiqh_terms,
+      mustInclude: ['সালাত'],
+    };
+  }
+
+  // 3c. Satan, Waswasa & Temptation
+  if (/(শয়তান|শয়তান).*(?:ওয়াসওয়াসা|ওয়াসওয়াসা|ধোঁকা|ধোকা|কুমন্ত্রণা|কুচিন্তা|খারাপ\s*চিন্তা)/iu.test(q) || /(soitan|shaitan).*(?:waswasa|dhoka|mukti|kuchinta)/iu.test(q)) {
+    const technical_fiqh_terms = ['শয়তানের ওয়াসওয়াসা', 'শয়তানের কুমন্ত্রণা', 'কুচিন্তা', 'অন্তরে খারাপ চিন্তা', 'ইস্তিগফার', 'আউযুবিল্লাহ'];
+    const expanded_keywords = ['শয়তানের ধোঁকা থেকে বাঁচার উপায়', 'অন্তরে কুচিন্তা আসলে কি গুনাহ হয়', 'ওয়াসওয়াসা দূর করার দোয়া'];
+    return {
+      fiqh_intent: 'শয়তানের ওয়াসওয়াসা, ধোঁকা ও অন্তরের কুচিন্তা দূর করার শারয়ী উপায় এবং এর বিধান।',
+      fiqh_category: 'Aqeedah & Tazkiyah',
+      technical_fiqh_terms,
+      expanded_keywords,
+      optimized_search_query: `${rawQuery} শয়তানের ওয়াসওয়াসা কুমন্ত্রণা কুচিন্তা ধোঁকা অন্তরে খারাপ চিন্তা বাঁচবে`,
+      canonicalBengali: 'শয়তানের ওয়াসওয়াসা ও কুচিন্তা থেকে বাঁচার শারয়ী বিধান',
+      coreSubject: 'ওয়াসওয়াসা',
+      coreAspect: 'শয়তানের ধোঁকা',
+      essentialKeywords: ['শয়তান', 'ওয়াসওয়াসা'],
+      fiqhConcepts: technical_fiqh_terms,
+      primarySubject: 'ওয়াসওয়াসা',
+      primaryAction: 'শয়তান',
+      fiqhTerms: technical_fiqh_terms,
+      mustInclude: ['শয়তান'],
+    };
+  }
+
+  // 3d. Aqeeqah with Animals
+  if (/(আকীকা|আক্বীক্বা|আকিকা).*(?:ছাগল|খাসী|ভেড়া|পশু|গরু|ছেলে|মেয়ে|সন্তান)/iu.test(q) || /(akika|aqiqah).*(?:chagol|khasi|chele|meye|poshu)/iu.test(q)) {
+    const technical_fiqh_terms = ['আকীকা', 'আক্বীক্বা', 'ছাগল দিয়ে আকীকা', 'ছেলের আকীকা', 'মেয়ের আকীকা', 'খাসী কুরবানী'];
+    const expanded_keywords = ['ছেলের জন্য কয়টি ছাগল', 'মেয়ের জন্য কয়টি ছাগল', 'গরু দিয়ে আকীকা', 'আকীকার পশু'];
+    return {
+      fiqh_intent: 'সন্তানের (ছেলে বা মেয়ে) আকীকা করার নিয়ম ও আকীকার পশুর (ছাগল, খাসী) শারয়ী বিধান।',
+      fiqh_category: 'Sacrifice & Sunnah (Aqeeqah)',
+      technical_fiqh_terms,
+      expanded_keywords,
+      optimized_search_query: `${rawQuery} আকীকা ছাগল খাসী ছেলের আকীকা মেয়ের আকীকা সন্তানের আকীকা বিধান`,
+      canonicalBengali: 'ছাগল দ্বারা সন্তানের আকীকা করার শারয়ী বিধান',
+      coreSubject: 'আকীকা',
+      coreAspect: 'ছাগল দিয়ে আকীকা',
+      essentialKeywords: ['আকীকা', 'ছাগল'],
+      fiqhConcepts: technical_fiqh_terms,
+      primarySubject: 'আকীকা',
+      primaryAction: 'ছাগল দিয়ে আকীকা',
+      fiqhTerms: technical_fiqh_terms,
+      mustInclude: ['আকীকা'],
     };
   }
 
@@ -360,8 +447,17 @@ export async function extractSemanticFiqhIntent(rawQuery: string): Promise<FiqhS
     return semanticCache.get(cacheKey)!;
   }
 
+  // Expand Latin/Banglish script query to Bengali for deterministic intent mapping
+  let queryForIntent = query;
+  if (isLatinScript(query)) {
+    const trans = transliterateQuery(query);
+    if (trans.primaryBengali) {
+      queryForIntent = `${query} ${trans.primaryBengali} ${trans.expandedTerms.join(' ')}`;
+    }
+  }
+
   // Check deterministic offline knowledge graph
-  const deterministicMatch = getDeterministicFiqhFallback(query);
+  const deterministicMatch = getDeterministicFiqhFallback(queryForIntent);
 
   const apiKey = getApiKey();
   if (!apiKey) {
