@@ -53,13 +53,13 @@ body {
 .font-bengali {
   font-family: 'Hind Siliguri', 'Noto Serif Bengali', -apple-system, sans-serif;
   line-height: 1.82;
-  word-spacing: 0.05em;
+  word-spacing: 0.04em;
 }
 
 .font-bengali-serif {
-  font-family: 'Noto Serif Bengali', serif;
+  font-family: 'Noto Serif Bengali', 'Anek Bangla', serif;
   line-height: 1.82;
-  word-spacing: 0.05em;
+  word-spacing: 0.04em;
 }
 
 .font-arabic {

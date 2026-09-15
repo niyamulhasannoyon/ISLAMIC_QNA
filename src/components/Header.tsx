@@ -79,53 +79,33 @@ export function Header() {
   };
 
   return (
-    <header className="border-b border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-[#09090b]/85 backdrop-blur-md sticky top-0 z-30 transition-colors">
+    <header className="border-b border-zinc-200/60 dark:border-zinc-800/60 bg-white/75 dark:bg-[#09090b]/80 backdrop-blur-xl sticky top-0 z-30 transition-colors">
       <div className="max-w-5xl mx-auto px-3.5 sm:px-6 h-13 sm:h-14 flex items-center justify-between gap-2">
         {/* Brand & Editorial Archive Masthead */}
-        <Link href="/" className="flex items-center gap-2 sm:gap-3 min-w-0 shrink hover:opacity-90 transition-opacity">
+        <Link href="/" className="flex items-center gap-2.5 min-w-0 shrink group transition-opacity">
           <Logo size="sm" />
-          <div className="flex items-baseline gap-2 min-w-0">
-            {/* Desktop Full Brand Title */}
-            <span
-              className={cn(
-                "hidden sm:inline font-semibold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 whitespace-nowrap",
-                lang === "ar" ? "font-arabic text-base" : lang === "bn" ? "font-bengali font-bold" : "font-sans"
-              )}
-            >
-              {t.header.brandTitle}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-bold text-base sm:text-lg tracking-tight text-zinc-900 dark:text-zinc-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors font-sans">
+              Deen<span className="text-emerald-600 dark:text-emerald-400">QnA</span>
             </span>
-            {/* Mobile Concise Brand Title */}
-            <span
-              className={cn(
-                "sm:hidden font-semibold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 truncate whitespace-nowrap",
-                lang === "ar" ? "font-arabic text-sm" : lang === "bn" ? "font-bengali font-bold" : "font-sans"
-              )}
-            >
-              {t.header.brandShortTitle}
-            </span>
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono hidden md:inline-block">
-              {t.header.brandSubtitle}
+            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-bengali">
+              <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+              দ্বীন গবেষণা
             </span>
           </div>
         </Link>
 
         {/* Right Action: Language Switcher, Theme Toggle & User Auth */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Multi-language Selector */}
           <LanguageSwitcher />
 
-          {/* Status Pill */}
-          <div className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400 text-[11px] font-mono font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span>{t.header.archiveStatus}</span>
-          </div>
-
-          {/* Theme Toggle */}
+          {/* Theme Toggle with Glassmorphism */}
           <button
             onClick={toggleTheme}
             aria-label={t.header.toggleTheme}
             title={t.header.toggleTheme}
-            className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg border border-zinc-200 dark:border-zinc-800/80 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors shrink-0"
+            className="h-8 w-8 rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/60 dark:bg-zinc-900/60 backdrop-blur-md flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 transition-colors shrink-0"
           >
             {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
           </button>

@@ -17,6 +17,17 @@ export interface FatwaQA {
   updated_at?: string;
 }
 
+export interface RelatedFatwaItem {
+  id: string;
+  title: string;
+  question?: string;
+  answer?: string;
+  category: string;
+  source: FatwaSource;
+  scholar: string;
+  published_date: string;
+}
+
 export interface IngestItemInput {
   id?: string;
   source: FatwaSource | string;
@@ -78,6 +89,24 @@ export interface SearchFacets {
   scholars?: FacetCount[];
 }
 
+export interface FiqhSemanticAnalysis {
+  fiqh_intent: string;
+  fiqh_category: string;
+  technical_fiqh_terms: string[];
+  expanded_keywords: string[];
+  optimized_search_query: string;
+  // Compatibility aliases
+  canonicalBengali?: string;
+  coreSubject?: string;
+  coreAspect?: string;
+  essentialKeywords?: string[];
+  fiqhConcepts?: string[];
+  primarySubject?: string;
+  primaryAction?: string;
+  fiqhTerms?: string[];
+  mustInclude?: string[];
+}
+
 export interface SearchResponse {
   results: SearchResultItem[];
   total: number;
@@ -87,4 +116,5 @@ export interface SearchResponse {
   tookMs: number;
   engine?: string;
   facets: SearchFacets;
+  semanticIntent?: FiqhSemanticAnalysis;
 }

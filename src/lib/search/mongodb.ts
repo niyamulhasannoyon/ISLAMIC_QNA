@@ -1,4 +1,4 @@
-import { FatwaQA, SearchQueryOptions, SearchResponse, SearchResultItem } from '@/types/fatwa';
+import { FatwaQA, SearchQueryOptions, SearchResponse, SearchResultItem, FiqhSemanticAnalysis } from '@/types/fatwa';
 import { SearchEngine } from './types';
 import { transliterateQuery } from './transliterate';
 import { getSynonymsAndVariants } from './synonyms';
@@ -6,6 +6,7 @@ import { normalizeBengaliText, stemBengaliToken, isStopWord } from './normalizer
 import { getMongoDb, isMongoConfigured, getFacetsMongo } from '../db/mongodb';
 import { generateHighlightedSnippet } from './local';
 import { escapeRegExp } from '../utils';
+import { extractSemanticFiqhIntent } from '../ai/semantic';
 
 export class MongoAtlasSearchEngine implements SearchEngine {
   public name = 'MongoDB Atlas Search (Bengali Analyzer)';
@@ -68,13 +69,19 @@ export class MongoAtlasSearchEngine implements SearchEngine {
   /**
    * Generates MongoDB Atlas Search aggregation pipeline for Bengali full-text search
    */
-  public buildAtlasSearchPipeline(options: SearchQueryOptions): any[] {
+  public buildAtlasSearchPipeline(options: SearchQueryOptions, aiIntent?: FiqhSemanticAnalysis | null): any[] {
     const rawQuery = (options.q || '').trim();
     const transliterated = transliterateQuery(rawQuery);
     const primaryQuery = transliterated.primaryBengali || rawQuery;
     const normalized = normalizeBengaliText(primaryQuery);
     const synonyms = normalized.split(/\s+/).flatMap((t) => getSynonymsAndVariants(t));
-    const finalSearchQuery = Array.from(new Set([normalized, ...transliterated.expandedTerms, ...synonyms.slice(0, 5)])).join(' ');
+    const aiTerms = [
+      ...(aiIntent?.technical_fiqh_terms || []),
+      ...(aiIntent?.expanded_keywords || []),
+    ];
+    const finalSearchQuery = Array.from(
+      new Set([normalized, ...transliterated.expandedTerms, ...synonyms.slice(0, 5), ...aiTerms.slice(0, 6)])
+    ).join(' ');
 
     const shouldClauses: any[] = [];
     const filterClauses: any[] = [];
@@ -110,6 +117,17 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           score: { boost: { value: 2.0 } },
         },
       });
+
+      // Boost specific classical Islamic jurisprudence concepts
+      if (aiIntent?.technical_fiqh_terms && aiIntent.technical_fiqh_terms.length > 0) {
+        shouldClauses.push({
+          text: {
+            query: aiIntent.technical_fiqh_terms.join(' '),
+            path: ['title', 'question'],
+            score: { boost: { value: 6.0 } },
+          },
+        });
+      }
     }
 
     if (options.source && options.source !== 'All') {
@@ -262,6 +280,8 @@ export class MongoAtlasSearchEngine implements SearchEngine {
     }
 
     // 2. Search query processing & expansion
+    const aiIntent = await extractSemanticFiqhIntent(rawQuery);
+
     const transliterated = transliterateQuery(rawQuery);
     const primaryQuery = transliterated.primaryBengali || rawQuery;
     const normalizedQuery = normalizeBengaliText(primaryQuery);
@@ -272,6 +292,19 @@ export class MongoAtlasSearchEngine implements SearchEngine {
 
     const expandedSynonyms = new Set<string>();
     const highlightTerms = new Set<string>();
+
+    if (aiIntent?.technical_fiqh_terms) {
+      aiIntent.technical_fiqh_terms.forEach((ft) => {
+        expandedSynonyms.add(ft);
+        highlightTerms.add(ft);
+      });
+    }
+    if (aiIntent?.expanded_keywords) {
+      aiIntent.expanded_keywords.forEach((ek) => {
+        expandedSynonyms.add(ek);
+        highlightTerms.add(ek);
+      });
+    }
 
     transliterated.expandedTerms.forEach((t) => {
       if (!isStopWord(t) && t.length >= 2) {
@@ -303,7 +336,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
 
     // Try Atlas Search aggregation pipeline
     try {
-      const pipeline = this.buildAtlasSearchPipeline(options);
+      const pipeline = this.buildAtlasSearchPipeline(options, aiIntent);
       const aggResults = await collection.aggregate(pipeline).toArray();
       if (aggResults && aggResults.length > 0) {
         docs = aggResults;
@@ -383,6 +416,23 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           }
         }
 
+        // High-Priority Technical Fiqh Term Matches (Highest Domain Weight)
+        if (aiIntent?.technical_fiqh_terms) {
+          for (const term of aiIntent.technical_fiqh_terms) {
+            const tLower = term.toLowerCase();
+            if (titleLower.includes(tLower)) {
+              score += 350.0;
+              matched.add(term);
+            } else if (questionLower.includes(tLower)) {
+              score += 260.0;
+              matched.add(term);
+            } else if (answerLower.includes(tLower)) {
+              score += 120.0;
+              matched.add(term);
+            }
+          }
+        }
+
         return {
           doc,
           score,
@@ -440,6 +490,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       tookMs: Date.now() - startTime,
       engine: usedAtlasSearch ? this.name : `${this.name} (Resilient Text)`,
       facets,
+      semanticIntent: aiIntent || undefined,
     };
   }
 }

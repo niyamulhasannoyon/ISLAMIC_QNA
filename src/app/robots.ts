@@ -1,25 +1,32 @@
 import { MetadataRoute } from "next";
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "https://fatwa-archive.vercel.app";
+import { getSiteUrl } from "@/lib/utils";
 
 export default function robots(): MetadataRoute.Robots {
+  const siteUrl = getSiteUrl();
+
   return {
     rules: [
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/v1/ingest"],
+        disallow: ["/api/v1/ingest", "/admin"],
+      },
+      {
+        userAgent: "Googlebot",
+        allow: "/",
+        disallow: ["/api/v1/ingest", "/admin"],
+      },
+      {
+        userAgent: "Googlebot-Image",
+        allow: "/",
+      },
+      {
+        userAgent: "bingbot",
+        allow: "/",
+        disallow: ["/api/v1/ingest", "/admin"],
       },
     ],
-    sitemap: [
-      `${siteUrl}/sitemap.xml`,
-      `${siteUrl}/sitemap/0.xml`,
-      `${siteUrl}/sitemap/1.xml`,
-      `${siteUrl}/sitemap/2.xml`,
-    ],
+    sitemap: `${siteUrl}/sitemap.xml`,
+    host: siteUrl,
   };
 }
-

@@ -25,7 +25,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "inline-flex items-center p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100/80 dark:bg-zinc-900/90 text-xs",
+        "inline-flex items-center p-0.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/60 dark:bg-zinc-900/60 backdrop-blur-md text-xs",
         className
       )}
       role="group"

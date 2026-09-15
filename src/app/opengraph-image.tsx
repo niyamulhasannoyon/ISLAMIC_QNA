@@ -46,11 +46,11 @@ export default function Image() {
               فت
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: "-0.5px" }}>
-                Islamic Fatwa &amp; Research Archive
+              <span style={{ fontSize: "22px", fontWeight: "bold", letterSpacing: "-0.5px" }}>
+                Deen QnA | দ্বীন কিউএনএ
               </span>
               <span style={{ fontSize: "14px", color: "#a1a1aa" }}>
-                Al-I&apos;tisam &bull; At-Tahreek &bull; Al-Kawsar
+                আল-ইতিসাম &bull; আত-তাহরীক &bull; মাসিক আলকাউসার
               </span>
             </div>
           </div>
@@ -85,7 +85,7 @@ export default function Image() {
               maxWidth: "960px",
             }}
           >
-            ইসলামিক প্রশ্নোত্তর ও ফতোয়া ডিজিটাল আর্কাইভ
+            Deen QnA - ইসলামিক প্রশ্নোত্তর ও ফতোয়া ডিজিটাল আর্কাইভ
           </h1>
           <p
             style={{
@@ -118,7 +118,7 @@ export default function Image() {
             <span>&bull; ব্যবসা ও আধুনিক মাসআলা</span>
             <span>&bull; ক্রিপ্টোগ্রাফিক ভেরিফায়েড</span>
           </div>
-          <span style={{ color: "#10b981", fontWeight: 600 }}>verified-fatwa.org</span>
+          <span style={{ color: "#10b981", fontWeight: 600, fontSize: "18px" }}>deenqna.vercel.app</span>
         </div>
       </div>
     ),

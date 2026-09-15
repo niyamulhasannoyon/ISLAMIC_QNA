@@ -178,44 +178,79 @@ function mapMongoFatwaDoc(doc: any): FatwaQA {
   };
 }
 
+const fatwaCache = new Map<string, { data: FatwaQA; expiresAt: number }>();
+const FATWA_CACHE_TTL = 15 * 60 * 1000; // 15 minutes TTL in memory
+
 export async function getFatwaByIdMongo(idOrSlug: string): Promise<FatwaQA | null> {
   if (!idOrSlug || typeof idOrSlug !== 'string') return null;
-  const db = await getMongoDb();
-  if (!db) return null;
-
-  const collection = db.collection('fatwas');
 
   let decoded = idOrSlug.trim();
   try {
     decoded = decodeURIComponent(idOrSlug).trim();
   } catch {}
 
-  const candidate = extractIdFromSlug(decoded);
-
-  // 1. Try exact matches on decoded input and extracted candidate (id, _id, sha256_hash)
-  const exactCandidates = Array.from(new Set([decoded, candidate].filter(Boolean)));
-  for (const c of exactCandidates) {
-    const doc = await collection.findOne({
-      $or: [
-        { id: c },
-        { _id: c as any },
-        { sha256_hash: c.toLowerCase() },
-      ],
-    });
-    if (doc) return mapMongoFatwaDoc(doc);
+  const now = Date.now();
+  const cached = fatwaCache.get(decoded);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
   }
 
-  // 2. Try prefix regex match if candidate or cleanHex is a valid hex prefix (min 6 chars)
-  const cleanHex = candidate.replace(/[^a-f0-9]/gi, '').toLowerCase();
-  if (cleanHex.length >= 6) {
-    const prefixRegex = new RegExp(`^${cleanHex}`, 'i');
-    const doc = await collection.findOne({
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const collection = db.collection('fatwas');
+  const candidate = extractIdFromSlug(decoded);
+
+  if (candidate && candidate !== decoded) {
+    const cachedCandidate = fatwaCache.get(candidate);
+    if (cachedCandidate && cachedCandidate.expiresAt > now) {
+      return cachedCandidate.data;
+    }
+  }
+
+  let doc: any = null;
+  const isUuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(candidate);
+  const isHash = /^[a-f0-9]{64}$/i.test(candidate);
+
+  if (isUuid || isHash) {
+    doc = await collection.findOne({
       $or: [
-        { id: { $regex: prefixRegex } },
-        { sha256_hash: { $regex: prefixRegex } },
+        { _id: candidate as any },
+        { id: candidate },
+        { sha256_hash: candidate.toLowerCase() },
       ],
     });
-    if (doc) return mapMongoFatwaDoc(doc);
+  } else {
+    const cleanHex = candidate.replace(/[^a-f0-9]/gi, '').toLowerCase();
+    if (cleanHex.length >= 6) {
+      doc = await collection.findOne({
+        $or: [
+          { _id: candidate as any },
+          { id: candidate },
+          { _id: { $regex: `^${cleanHex}` } },
+          { id: { $regex: `^${cleanHex}` } },
+          { sha256_hash: { $regex: `^${cleanHex}` } },
+        ],
+      });
+    } else {
+      doc = await collection.findOne({
+        $or: [
+          { id: decoded },
+          { _id: decoded as any },
+          { sha256_hash: decoded.toLowerCase() },
+        ],
+      });
+    }
+  }
+
+  if (doc) {
+    const mapped = mapMongoFatwaDoc(doc);
+    const expiresAt = now + FATWA_CACHE_TTL;
+    fatwaCache.set(decoded, { data: mapped, expiresAt });
+    if (candidate) fatwaCache.set(candidate, { data: mapped, expiresAt });
+    if (mapped.id) fatwaCache.set(mapped.id, { data: mapped, expiresAt });
+    if (mapped.sha256_hash) fatwaCache.set(mapped.sha256_hash, { data: mapped, expiresAt });
+    return mapped;
   }
 
   return null;
@@ -346,6 +381,29 @@ export async function getFatwaCountMongo(): Promise<number> {
   const db = await getMongoDb();
   if (!db) return 0;
   return db.collection('fatwas').estimatedDocumentCount();
+}
+
+export async function getFatwaMetadataListMongo(
+  limit: number = 2000,
+  offset: number = 0
+): Promise<Array<{ id: string; title: string; updated_at: string; published_date: string }>> {
+  const db = await getMongoDb();
+  if (!db) return [];
+
+  const docs = await db
+    .collection('fatwas')
+    .find({}, { projection: { _id: 0, id: 1, title: 1, updated_at: 1, published_date: 1 } })
+    .sort({ _id: 1 })
+    .skip(offset)
+    .limit(limit)
+    .toArray();
+
+  return docs.map((d: any) => ({
+    id: d.id || String(d._id),
+    title: d.title || '',
+    updated_at: d.updated_at || '',
+    published_date: d.published_date || '',
+  }));
 }
 
 export async function getFacetsMongo(): Promise<SearchFacets> {

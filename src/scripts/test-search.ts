@@ -169,7 +169,52 @@ async function runTests() {
   }
   console.log("Verified 10 results for 'soitan er dhoka': zero 'er'/'এর' stop-word contamination in snippets!");
 
-  console.log('\nAll 13 professional search test suites passed successfully!');
+  console.log('\n=== 14. Testing AI Fiqh Semantic Optimization ("দীর্ঘদিন রক্তস্রাবে নারীর সালাতের বিধান") ===');
+  const istihadhaRes = await searchFatwas({ q: 'দীর্ঘদিন রক্তস্রাবে নারীর সালাতের বিধান', limit: 5 });
+  console.log(`Results for 'দীর্ঘদিন রক্তস্রাবে নারীর সালাতের বিধান': ${istihadhaRes.total} (took ${istihadhaRes.tookMs}ms)`);
+  if (istihadhaRes.total === 0) {
+    throw new Error("Expected search 'দীর্ঘদিন রক্তস্রাবে নারীর সালাতের বিধান' to return results");
+  }
+  if (!istihadhaRes.semanticIntent) {
+    throw new Error("Expected search response to include semanticIntent");
+  }
+  console.log(`Fiqh Intent: "${istihadhaRes.semanticIntent.fiqh_intent}"`);
+  console.log(`Fiqh Category: "${istihadhaRes.semanticIntent.fiqh_category}"`);
+  console.log(`Technical Terms:`, istihadhaRes.semanticIntent.technical_fiqh_terms);
+
+  const hasIstihadhaTerm = istihadhaRes.semanticIntent.technical_fiqh_terms.some((t) =>
+    ['ইস্তিহাযা', 'ইস্তিহাজা', 'মুস্তাহাযা', 'মুস্তাহাজা'].includes(t)
+  );
+  if (!hasIstihadhaTerm) {
+    throw new Error("Expected technical_fiqh_terms to include 'ইস্তিহাযা' or 'মুস্তাহাযা'");
+  }
+
+  // Check top result is directly an Istihadha fatwa
+  const top1 = istihadhaRes.results[0];
+  console.log(`Top #1 title: "${top1.title}" (Score: ${top1.score.toFixed(1)})`);
+  const topCombined = (top1.title + ' ' + top1.question + ' ' + top1.answer).toLowerCase();
+  const topHasIstihadha = ['ইস্তিহাযা', 'ইস্তিহাজা', 'মুস্তাহাযা', 'মুস্তাহাজা'].some((w) => topCombined.includes(w));
+  if (!topHasIstihadha) {
+    throw new Error(`Expected #1 fatwa to directly address Istihadha/Mustahadha, got "${top1.title}"`);
+  }
+  console.log('Verified: Top result is an authentic Istihadha/Mustahadha legal ruling!');
+
+  console.log('\n=== 15. Testing Multi-Domain Fiqh Semantic Mapping ("দাড়ি কাটা", "শেয়ার বাজার") ===');
+  const { extractSemanticFiqhIntent } = await import('../lib/ai/semantic');
+
+  const beardIntent = await extractSemanticFiqhIntent('দাড়ি কাটা যাবে কি');
+  if (!beardIntent || !beardIntent.technical_fiqh_terms.some((t) => t.includes('দাড়ি') || t.includes('মুণ্ডন') || t.includes('সুন্নাহ') || t.includes('ওয়াজিব'))) {
+    throw new Error("Expected beard query to map to authentic technical Sunnah/Wajib/Mundan terms");
+  }
+  console.log(`Beard intent verified: category="${beardIntent.fiqh_category}", terms=`, beardIntent.technical_fiqh_terms);
+
+  const financeIntent = await extractSemanticFiqhIntent('শেয়ার বাজার হালাল নাকি হারাম');
+  if (!financeIntent || !financeIntent.technical_fiqh_terms.some((t) => t.includes('মুদারাবা') || t.includes('রিবা') || t.includes('সুদ') || t.includes('শেয়ার'))) {
+    throw new Error("Expected stock market query to map to authentic Islamic financial terms");
+  }
+  console.log(`Finance intent verified: category="${financeIntent.fiqh_category}", terms=`, financeIntent.technical_fiqh_terms);
+
+  console.log('\nAll 15 professional search test suites passed successfully!');
 }
 
 runTests().catch((err) => {

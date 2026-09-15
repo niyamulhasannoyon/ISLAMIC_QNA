@@ -10,7 +10,7 @@ import { FatwaModal } from "@/components/FatwaModal";
 import { SkeletonLoader } from "@/components/SkeletonLoader";
 import { EmptyState } from "@/components/EmptyState";
 import { useLanguage } from "@/context/LanguageContext";
-import { SearchResponse, SearchResultItem, FacetCount } from "@/types/fatwa";
+import { SearchResponse, SearchResultItem, FacetCount, FiqhSemanticAnalysis } from "@/types/fatwa";
 import { ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 import {
   buildCacheKey,
@@ -51,6 +51,7 @@ export default function Home() {
   const [sourceFacets, setSourceFacets] = useState<FacetCount[]>([]);
   const [categoryFacets, setCategoryFacets] = useState<FacetCount[]>([]);
   const [scholarFacets, setScholarFacets] = useState<FacetCount[]>([]);
+  const [semanticIntent, setSemanticIntent] = useState<FiqhSemanticAnalysis | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -118,6 +119,7 @@ export default function Home() {
       setTotalResults(cached.total);
       setTotalPages(cached.totalPages || 1);
       setTookMs(cached.tookMs);
+      setSemanticIntent(cached.semanticIntent);
       if (cached.facets) {
         setSourceFacets(cached.facets.sources || []);
         setCategoryFacets(cached.facets.categories || []);
@@ -145,6 +147,7 @@ export default function Home() {
       setTotalResults(data.total);
       setTotalPages(data.totalPages || 1);
       setTookMs(data.tookMs);
+      setSemanticIntent(data.semanticIntent);
       if (data.facets) {
         setSourceFacets(data.facets.sources || []);
         setCategoryFacets(data.facets.categories || []);
@@ -273,12 +276,20 @@ export default function Home() {
     setPage(1);
   };
 
+  const isSearchActive = Boolean(
+    query.trim() ||
+    debouncedQuery.trim() ||
+    selectedSource !== "All" ||
+    selectedCategory !== "All" ||
+    (selectedScholar && selectedScholar !== "All")
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-[#fcfcfc] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 transition-colors">
       <Header />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 pb-16 sm:pb-20">
-        {/* Command-style Search Hero with instant previews */}
+        {/* Command-style Search Hero with State Separation (Initial vs Active) */}
         <SearchHero
           query={query}
           onQueryChange={setQuery}
@@ -287,9 +298,11 @@ export default function Home() {
           tookMs={tookMs}
           previewResults={results}
           onSelectPreviewItem={(item) => setActiveModalItem(item)}
+          semanticIntent={semanticIntent}
+          isActive={isSearchActive}
         />
 
-        {/* Tactile Filter Bar: Sources, Categories & Scholars */}
+        {/* Tactile Filter Bar: Sleek Horizontal Inline Chips */}
         <FilterBar
           selectedSource={selectedSource}
           onSelectSource={handleSourceChange}
@@ -307,6 +320,14 @@ export default function Home() {
 
         {/* Results Container with Optimistic Skeleton */}
         <div className="w-full max-w-3xl mx-auto space-y-3 sm:space-y-4">
+          {/* Subtle label when browsing without search query */}
+          {!isSearchActive && results.length > 0 && !isLoading && (
+            <div className="pt-2 pb-1 flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500 font-mono border-b border-zinc-200/60 dark:border-zinc-800/60 mb-1">
+              <span className="font-bengali font-medium">সর্বশেষ সংযোজিত ফতোয়াসমূহ</span>
+              <span className="text-[11px] font-mono">লাইভ সংগ্রহশালা</span>
+            </div>
+          )}
+
           {isLoading && results.length === 0 ? (
             <SkeletonLoader />
           ) : results.length > 0 ? (

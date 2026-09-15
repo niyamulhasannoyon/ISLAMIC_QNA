@@ -10,12 +10,20 @@ const siteUrl = getSiteUrl();
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "ইসলামিক ফতোয়া ও প্রশ্নোত্তর আর্কাইভ | Islamic Fatwa & Research Archive",
-    template: "%s | ইসলামিক ফতোয়া ও প্রশ্নোত্তর আর্কাইভ",
+    default: "Deen QnA - ইসলামিক ফতোয়া ও প্রশ্নোত্তর আর্কাইভ | ২০,০০০+ প্রামাণিক সমাধান",
+    template: "%s | Deen QnA - ইসলামিক প্রশ্নোত্তর ও ফতোয়া",
   },
   description:
-    "আল-ইতিসাম, আত-তাহরীক ও নির্ভরযোগ্য ইসলামিক স্কলারদের ২০,০০০+ প্রামাণিক ফতোয়া ও ইসলামিক প্রশ্নোত্তর ডিজিটাল আর্কাইভ। ফিকহ, সালাত, সাওম, যাকাত ও সমকালীন মাসআলা-মাসায়েল অনুসন্ধান করুন।",
+    "Deen QnA (দ্বীন কিউএনএ) - আল-ইতিসাম, আত-তাহরীক ও মাসিক আলকাউসারের ২০,০০০+ প্রামাণ্য ইসলামিক ফতোয়া ও প্রশ্নোত্তর ডিজিটাল আর্কাইভ। কুরআন ও সহীহ সুন্নাহ ভিত্তিক শরয়ী সমাধান।",
   keywords: [
+    "Deen QnA",
+    "DeenQnA",
+    "deen qna",
+    "deen qa",
+    "দ্বীন কিউএনএ",
+    "দীন কিউএনএ",
+    "দ্বীন প্রশ্নোত্তর",
+    "Deen Q&A",
     "ফতোয়া",
     "ইসলামিক প্রশ্ন উত্তর",
     "Fatwa",
@@ -29,13 +37,15 @@ export const metadata: Metadata = {
     "ফিকহ",
     "হাদীস",
     "সালাত",
+    "সিয়াম",
     "যাকাত",
     "শরীয়া সমাধান",
     "Scholarly Fatwa Archive Bangladesh",
+    "deenqna.vercel.app",
   ],
-  authors: [{ name: "Islamic Fatwa & Research Editorial Archive" }],
-  creator: "Islamic Fatwa Archive",
-  publisher: "Islamic Fatwa Archive",
+  authors: [{ name: "Deen QnA Editorial Team" }],
+  creator: "Deen QnA",
+  publisher: "Deen QnA",
   verification: {
     google: "4mbgGQs3PoTcMTbCYLFypmE_u9bbwfwW4_F85kWGmXA",
   },
@@ -63,16 +73,16 @@ export const metadata: Metadata = {
     locale: "bn_BD",
     alternateLocale: ["ar_SA", "en_US"],
     url: siteUrl,
-    siteName: "Islamic Fatwa & Research Archive",
-    title: "ইসলামিক ফতোয়া ও প্রশ্নোত্তর আর্কাইভ | Islamic Fatwa & Research Archive",
+    siteName: "Deen QnA | ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
+    title: "Deen QnA - ইসলামিক ফতোয়া ও প্রশ্নোত্তর ডিজিটাল আর্কাইভ",
     description:
-      "আল-ইতিসাম, আত-তাহরীক ও নির্ভরযোগ্য ইসলামিক স্কলারদের ২০,০০০+ প্রামাণিক ফতোয়া ও শরয়ী সমাধান।",
+      "আল-ইতিসাম, আত-তাহরীক ও মাসিক আলকাউসারের ২০,০০০+ প্রামাণিক ফতোয়া ও শরয়ী সমাধান। কুরআন ও সহীহ হাদীসের আলোকে অনুসন্ধান করুন।",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ইসলামিক ফতোয়া ও প্রশ্নোত্তর আর্কাইভ | Islamic Fatwa & Research Archive",
+    title: "Deen QnA - ইসলামিক ফতোয়া ও প্রশ্নোত্তর ডিজিটাল আর্কাইভ",
     description:
-      "আল-ইতিসাম, আত-তাহরীক ও নির্ভরযোগ্য ইসলামিক স্কলারদের ২০,০০০+ প্রামাণিক ফতোয়া ও শরয়ী সমাধান।",
+      "আল-ইতিসাম, আত-তাহরীক ও মাসিক আলকাউসারের ২০,০০০+ প্রামাণিক ফতোয়া ও শরয়ী সমাধান।",
   },
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
@@ -89,12 +99,19 @@ export default function RootLayout({
   const jsonLdWebsite = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
-    alternateName: "Islamic Fatwa & Research Archive",
+    name: "Deen QnA",
+    alternateName: [
+      "DeenQnA",
+      "deen qna",
+      "দ্বীন কিউএনএ",
+      "দীন কিউএনএ",
+      "Deen Q&A",
+      "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
+    ],
     url: siteUrl,
     inLanguage: ["bn", "ar", "en"],
     description:
-      "আল-ইতিসাম, আত-তাহরীক ও নির্ভরযোগ্য ইসলামিক স্কলারদের ২০,০০০+ প্রামাণিক ফতোয়া ও প্রশ্নোত্তর ডিজিটাল আর্কাইভ।",
+      "Deen QnA - আল-ইতিসাম, আত-তাহরীক ও নির্ভরযোগ্য ইসলামিক স্কলারদের ২০,০০০+ প্রামাণিক ফতোয়া ও প্রশ্নোত্তর ডিজিটাল আর্কাইভ।",
     potentialAction: {
       "@type": "SearchAction",
       target: {
@@ -108,7 +125,8 @@ export default function RootLayout({
   const jsonLdOrg = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Islamic Fatwa & Research Archive",
+    name: "Deen QnA",
+    alternateName: ["DeenQnA", "Islamic Fatwa & Research Archive"],
     url: siteUrl,
     logo: `${siteUrl}/icon.svg`,
     description: "Digital archive preserving verified Islamic rulings and fatwas.",
@@ -125,7 +143,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Hind+Siliguri:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Anek+Bangla:wght@400;500;600;700&family=Hind+Siliguri:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <script

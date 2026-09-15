@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { FatwaQA, FatwaSource, IngestItemInput, IngestResultItem, SearchFacets } from '@/types/fatwa';
+import { FatwaQA, FatwaSource, IngestItemInput, IngestResultItem, RelatedFatwaItem, SearchFacets } from '@/types/fatwa';
 import { computeFatwaHash, normalizeText, hashToUuid } from './hash';
 import { extractIdFromSlug } from './utils';
 import {
@@ -17,6 +17,8 @@ import {
   findDbSessionByTokenHashMongo,
   deleteDbSessionMongo,
   deleteSessionsByUserIdMongo,
+  getFatwaCountMongo,
+  getFatwaMetadataListMongo,
 } from './db/mongodb';
 
 // Singleton instance across hot reloads in Next.js
@@ -698,6 +700,22 @@ export function getFatwaCount(): number {
 }
 
 /**
+ * Hybrid persistent count:
+ * Checks MongoDB Atlas if configured, falling back to local SQLite.
+ */
+export async function getFatwaCountAsync(): Promise<number> {
+  if (isMongoConfigured()) {
+    try {
+      const count = await getFatwaCountMongo();
+      if (count > 0) return count;
+    } catch (err) {
+      console.warn('[MongoDB getFatwaCountAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return getFatwaCount();
+}
+
+/**
  * Returns a lightweight list of IDs and timestamps for XML sitemaps.
  */
 export function getFatwaMetadataList(
@@ -712,24 +730,36 @@ export function getFatwaMetadataList(
 }
 
 /**
- * Fetches related fatwas for internal crawlable link architecture.
+ * Hybrid persistent metadata list for sitemaps:
+ * Fetches lightweight metadata from MongoDB Atlas if configured, falling back to local SQLite.
+ */
+export async function getFatwaMetadataListAsync(
+  limit: number = 2000,
+  offset: number = 0
+): Promise<Array<{ id: string; title: string; updated_at: string; published_date: string }>> {
+  if (isMongoConfigured()) {
+    try {
+      const list = await getFatwaMetadataListMongo(limit, offset);
+      if (list && list.length > 0) return list;
+    } catch (err) {
+      console.warn('[MongoDB getFatwaMetadataListAsync Warning, falling back to SQLite]:', err);
+    }
+  }
+  return getFatwaMetadataList(limit, offset);
+}
+
+/**
+ * Fetches related fatwas for internal crawlable link architecture and recommended questions.
  */
 export function getRelatedFatwas(
   category: string,
   currentId: string,
-  limit: number = 5
-): Array<{
-  id: string;
-  title: string;
-  category: string;
-  source: FatwaSource;
-  scholar: string;
-  published_date: string;
-}> {
+  limit: number = 6
+): RelatedFatwaItem[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, title, category, source, scholar, published_date 
+      `SELECT id, title, question, substr(answer, 1, 160) as answer, category, source, scholar, published_date 
        FROM fatwas 
        WHERE category = ? AND id != ? 
        ORDER BY published_date DESC 
@@ -743,7 +773,7 @@ export function getRelatedFatwas(
     const remaining = limit - rows.length;
     const fallbacks = db
       .prepare(
-        `SELECT id, title, category, source, scholar, published_date 
+        `SELECT id, title, question, substr(answer, 1, 160) as answer, category, source, scholar, published_date 
          FROM fatwas 
          WHERE id NOT IN (${placeholders}) 
          ORDER BY published_date DESC 
@@ -757,35 +787,55 @@ export function getRelatedFatwas(
   return rows;
 }
 
+const relatedCache = new Map<string, { data: RelatedFatwaItem[]; expiresAt: number }>();
+const RELATED_CACHE_TTL = 15 * 60 * 1000; // 15 mins
+
 export async function getRelatedFatwasAsync(
   category: string,
   currentId: string,
-  limit: number = 5
-): Promise<
-  Array<{
-    id: string;
-    title: string;
-    category: string;
-    source: FatwaSource;
-    scholar: string;
-    published_date: string;
-  }>
-> {
+  limit: number = 6
+): Promise<RelatedFatwaItem[]> {
+  const cacheKey = `${category}_${limit}`;
+  const now = Date.now();
+  const cached = relatedCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > now) {
+    const filtered = cached.data.filter((item) => item.id !== currentId).slice(0, limit);
+    if (filtered.length >= limit) {
+      return filtered;
+    }
+  }
+
   if (isMongoConfigured()) {
     try {
       const { getMongoDb } = await import('./db/mongodb');
       const db = await getMongoDb();
       if (db) {
         const collection = db.collection('fatwas');
+        const projection = {
+          _id: 0,
+          id: 1,
+          title: 1,
+          question: 1,
+          answer: 1,
+          category: 1,
+          source: 1,
+          scholar: 1,
+          published_date: 1,
+        };
+
         const docs = await collection
           .find({ category, id: { $ne: currentId } })
+          .project(projection)
           .sort({ published_date: -1 })
-          .limit(limit)
+          .limit(limit + 4)
           .toArray();
 
-        const items = docs.map((d: any) => ({
-          id: d.id || String(d._id),
+        let items: RelatedFatwaItem[] = docs.map((d: any) => ({
+          id: d.id,
           title: d.title || '',
+          question: d.question || '',
+          answer: (d.answer || '').slice(0, 160),
           category: d.category || '',
           source: d.source as FatwaSource,
           scholar: d.scholar || '',
@@ -793,27 +843,31 @@ export async function getRelatedFatwasAsync(
         }));
 
         if (items.length < limit) {
-          const existingIds = [currentId, ...items.map((r) => r.id)];
-          const remaining = limit - items.length;
+          const excludeIds = [currentId, ...items.map((i) => i.id)];
           const fallbacks = await collection
-            .find({ id: { $nin: existingIds } })
+            .find({ id: { $nin: excludeIds } })
+            .project(projection)
             .sort({ published_date: -1 })
-            .limit(remaining)
+            .limit(limit - items.length)
             .toArray();
 
-          const fallbackItems = fallbacks.map((d: any) => ({
-            id: d.id || String(d._id),
-            title: d.title || '',
-            category: d.category || '',
-            source: d.source as FatwaSource,
-            scholar: d.scholar || '',
-            published_date: d.published_date || '',
-          }));
-
-          return [...items, ...fallbackItems];
+          items = [
+            ...items,
+            ...fallbacks.map((d: any) => ({
+              id: d.id,
+              title: d.title || '',
+              question: d.question || '',
+              answer: (d.answer || '').slice(0, 160),
+              category: d.category || '',
+              source: d.source as FatwaSource,
+              scholar: d.scholar || '',
+              published_date: d.published_date || '',
+            })),
+          ];
         }
 
-        return items;
+        relatedCache.set(cacheKey, { data: items, expiresAt: now + RELATED_CACHE_TTL });
+        return items.filter((item) => item.id !== currentId).slice(0, limit);
       }
     } catch (err) {
       console.warn('[MongoDB getRelatedFatwasAsync Warning, falling back to SQLite]:', err);

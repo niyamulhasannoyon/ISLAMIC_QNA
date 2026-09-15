@@ -1,4 +1,4 @@
-import React from "react";
+import React, { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -10,6 +10,7 @@ import { ShareButtons } from "@/components/ShareButtons";
 import { FatwaQA } from "@/types/fatwa";
 import {
   ArrowLeft,
+  ArrowRight,
   ExternalLink,
   Tag,
   GraduationCap,
@@ -19,9 +20,11 @@ import {
   CheckCircle2,
   ChevronRight,
   BookOpen,
+  Sparkles,
+  Compass,
 } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 86400; // Cache on Edge CDN for 24 hours (ISR)
 
 interface Props {
   params: {
@@ -29,9 +32,8 @@ interface Props {
   };
 }
 
-// Resilient dual-layer fatwa loader: checks local SQLite DB first, then falls back
-// to the authoritative /api/v1/fatwa endpoint if container storage differs
-async function fetchFatwaResilient(id: string): Promise<FatwaQA | null> {
+// Request-memoized authoritative fatwa loader across generateMetadata and FatwaPage
+const fetchFatwaResilient = cache(async (id: string): Promise<FatwaQA | null> => {
   if (!id) return null;
 
   let decodedId = id.trim();
@@ -52,7 +54,7 @@ async function fetchFatwaResilient(id: string): Promise<FatwaQA | null> {
     const siteUrl = getSiteUrl();
     const apiUrl = `${siteUrl}/api/v1/fatwa/${encodeURIComponent(id)}`;
     const res = await fetch(apiUrl, {
-      cache: "no-store",
+      next: { revalidate: 86400 },
       headers: {
         Accept: "application/json",
       },
@@ -69,7 +71,7 @@ async function fetchFatwaResilient(id: string): Promise<FatwaQA | null> {
   }
 
   return null;
-}
+});
 
 // Helper to strip HTML and condense whitespace for clean SERP meta descriptions
 function cleanTextSnippet(text: string, maxLength: number = 155): string {
@@ -87,13 +89,26 @@ function cleanTextSnippet(text: string, maxLength: number = 155): string {
   return clean.slice(0, end) + "...";
 }
 
+// Helper to ensure dates are valid ISO 8601 strings for Google Rich Results validator
+function toValidIsoDate(dateStr?: string, fallbackStr?: string): string {
+  if (dateStr) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  if (fallbackStr) {
+    const d = new Date(fallbackStr);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date().toISOString();
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const fatwa = await fetchFatwaResilient(params.id);
   const siteUrl = getSiteUrl();
 
   if (!fatwa) {
     return {
-      title: "ফতোয়া পাওয়া যায়নি | ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
+      title: "ফতোয়া পাওয়া যায়নি | Deen QnA",
       description: "অনুরোধকৃত ফতোয়া বা প্রশ্নোত্তরটি খুঁজে পাওয়া যায়নি।",
     };
   }
@@ -110,6 +125,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const keywords = Array.from(
     new Set([
       fatwa.title,
+      "Deen QnA",
+      "deen qna",
+      "দ্বীন কিউএনএ",
+      "দীন কিউএনএ",
       fatwa.category,
       fatwa.scholar,
       fatwa.source,
@@ -121,13 +140,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ])
   ).filter(Boolean);
 
+  const isoPublished = toValidIsoDate(fatwa.published_date, fatwa.created_at);
+  const isoModified = toValidIsoDate(fatwa.updated_at, fatwa.created_at);
+
   return {
     title: fatwa.title,
     description: cleanDescription,
     keywords,
     authors: [{ name: fatwa.scholar || fatwa.source }],
     creator: fatwa.scholar || fatwa.source,
-    publisher: "Islamic Fatwa & Research Archive",
+    publisher: "Deen QnA",
     alternates: {
       canonical: canonicalUrl,
     },
@@ -146,11 +168,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "article",
       locale: "bn_BD",
       url: canonicalUrl,
-      title: `${fatwa.title} | ইসলামিক ফতোয়া আর্কাইভ`,
+      title: `${fatwa.title} | Deen QnA`,
       description: cleanDescription,
-      siteName: "Islamic Fatwa & Research Archive",
-      publishedTime: fatwa.published_date,
-      modifiedTime: fatwa.updated_at,
+      siteName: "Deen QnA | ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
+      publishedTime: isoPublished,
+      modifiedTime: isoModified,
       authors: [fatwa.scholar || fatwa.source],
       tags: fatwa.tags,
       images: [
@@ -164,7 +186,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: fatwa.title,
+      title: `${fatwa.title} | Deen QnA`,
       description: cleanDescription,
       images: [`${siteUrl}/opengraph-image`],
     },
@@ -178,9 +200,26 @@ export default async function FatwaPage({ params }: Props) {
   }
 
   const siteUrl = getSiteUrl();
-  const relatedFatwas = await getRelatedFatwasAsync(fatwa.category, fatwa.id, 5);
+  const relatedFatwas = await getRelatedFatwasAsync(fatwa.category, fatwa.id, 6);
   const fatwaSlug = createFatwaSlug(fatwa.title, fatwa.id);
   const canonicalUrl = `${siteUrl}/fatwa/${fatwaSlug}`;
+
+  // Schema.org ItemList for Related Questions (Topical graph linking)
+  const relatedItemListSchema =
+    relatedFatwas.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "ItemList",
+          name: `${fatwa.category} সম্পর্কিত অন্যান্য গুরুত্বপূর্ণ প্রশ্নোত্তর`,
+          numberOfItems: relatedFatwas.length,
+          itemListElement: relatedFatwas.map((rf, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            name: rf.title,
+            url: `${siteUrl}/fatwa/${createFatwaSlug(rf.title, rf.id)}`,
+          })),
+        }
+      : null;
 
   // If accessed by old broken slug, short ID, or raw UUID, permanently redirect to clean canonical slug
   let currentDecoded = params.id.trim();
@@ -213,8 +252,10 @@ export default async function FatwaPage({ params }: Props) {
       : fatwa.source;
 
   const displayDate = fatwa.published_date || fatwa.created_at;
+  const isoCreated = toValidIsoDate(fatwa.created_at, fatwa.published_date);
+  const isoPublished = toValidIsoDate(fatwa.published_date, fatwa.created_at);
 
-  // Schema.org QAPage Structured Data
+  // Schema.org QAPage Structured Data (Optimized for Google Q&A Rich Results)
   const qaSchema = {
     "@context": "https://schema.org",
     "@type": "QAPage",
@@ -223,7 +264,7 @@ export default async function FatwaPage({ params }: Props) {
       name: fatwa.title,
       text: fatwa.question || fatwa.title,
       answerCount: 1,
-      dateCreated: fatwa.published_date || fatwa.created_at,
+      dateCreated: isoCreated,
       author: {
         "@type": "Organization",
         name: sourceDisplayName,
@@ -231,7 +272,7 @@ export default async function FatwaPage({ params }: Props) {
       acceptedAnswer: {
         "@type": "Answer",
         text: fatwa.answer,
-        datePublished: fatwa.published_date || fatwa.created_at,
+        datePublished: isoPublished,
         url: canonicalUrl,
         author: {
           "@type": "Person",
@@ -242,6 +283,22 @@ export default async function FatwaPage({ params }: Props) {
     },
   };
 
+  // Schema.org FAQPage Structured Data (Optimized for Google FAQ Rich Results)
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: fatwa.title,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: fatwa.answer,
+        },
+      },
+    ],
+  };
+
   // Schema.org BreadcrumbList Structured Data
   const breadcrumbSchema = {
     "@context": "https://schema.org",
@@ -250,7 +307,7 @@ export default async function FatwaPage({ params }: Props) {
       {
         "@type": "ListItem",
         position: 1,
-        name: "হোম",
+        name: "Deen QnA হোম",
         item: siteUrl,
       },
       {
@@ -277,8 +334,18 @@ export default async function FatwaPage({ params }: Props) {
       />
       <script
         type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
+      <script
+        type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
+      {relatedItemListSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(relatedItemListSchema) }}
+        />
+      )}
 
       <Header />
 
@@ -425,53 +492,177 @@ export default async function FatwaPage({ params }: Props) {
           </div>
         </article>
 
-        {/* Related Fatwas - Powerful Internal Linking Network for Crawlers */}
+        {/* Related Fatwas - High Craft Topical Knowledge Network */}
         {relatedFatwas.length > 0 && (
-          <section aria-label="সম্পর্কিত ফতোয়া" className="mt-12 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-bengali">
-                সম্পর্কিত ফতোয়া ও প্রশ্নোত্তর ({fatwa.category})
-              </h2>
-              <Link
-                href={`/?category=${encodeURIComponent(fatwa.category)}`}
-                className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-bengali"
-              >
-                সবগুলো দেখুন &rarr;
-              </Link>
+          <section aria-label="সম্পর্কিত প্রশ্নোত্তর" className="mt-14 pt-8 border-t border-zinc-200/80 dark:border-zinc-800/80">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-semibold font-bengali">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>সম্পর্কিত ফতোয়া ও গবেষণা</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 font-bengali-serif tracking-tight mt-2">
+                  সম্পর্কিত গুরুত্বপূর্ণ প্রশ্নোত্তর
+                </h2>
+                <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-bengali mt-1">
+                  {fatwa.category
+                    ? `"${fatwa.category}" বিষয় সম্পর্কিত প্রামাণিক ফতোয়া ও শরয়ী দিকনির্দেশনা`
+                    : "বিষয়ভিত্তিক অন্যান্য প্রামাণিক ফতোয়া ও সমাধান"}
+                </p>
+              </div>
+
+              {fatwa.category && (
+                <Link
+                  href={`/?category=${encodeURIComponent(fatwa.category)}`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors font-bengali shrink-0 group/link"
+                >
+                  <span>এই বিভাগের আরও প্রশ্ন</span>
+                  <ArrowRight className="h-3.5 w-3.5 group-hover/link:translate-x-0.5 transition-transform" />
+                </Link>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Grid of Related Question Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {relatedFatwas.map((rf) => {
                 const rfSlug = createFatwaSlug(rf.title, rf.id);
+                const isTahreek = rf.source?.toLowerCase().includes("tahreek");
+                const isKawsar =
+                  rf.source?.toLowerCase().includes("kawsar") ||
+                  rf.source?.toLowerCase().includes("kausar");
+                const isItisam = rf.source?.toLowerCase().includes("itisam");
+
+                let snippet = "";
+                if (rf.question && rf.question.trim() !== rf.title.trim()) {
+                  snippet = rf.question.trim();
+                } else if (rf.answer) {
+                  snippet = rf.answer.trim();
+                }
+                snippet = snippet
+                  .replace(/<[^>]*>/g, "")
+                  .replace(/^প্রশ্ন\s*(\([^\)]+\)|[০-৯0-9\/\s-]+)?\s*[:ঃ-]?\s*/u, "")
+                  .replace(/\s+/g, " ")
+                  .trim();
+
                 return (
                   <Link
                     key={rf.id}
                     href={`/fatwa/${rfSlug}`}
-                    className="block p-4 rounded-xl bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800/80 hover:border-emerald-500/50 dark:hover:border-emerald-500/40 hover:shadow-md transition-all group"
+                    prefetch={true}
+                    className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#121215] border border-zinc-200/90 dark:border-zinc-800/90 hover:border-emerald-500/50 dark:hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-950/5 dark:hover:shadow-emerald-950/20 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-2 text-[11px] text-zinc-400 mb-1.5 font-bengali">
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                        {rf.source === "at-tahreek"
-                          ? "আত-তাহরীক"
-                          : rf.source === "al-kawsar"
-                          ? "আলকাউসার"
-                          : "আল-ইতিসাম"}
-                      </span>
-                      <span>&bull;</span>
-                      <span>{rf.category}</span>
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-zinc-100 dark:border-zinc-800/60">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Source Badge */}
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-medium border font-bengali",
+                              isTahreek
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60"
+                                : isKawsar
+                                ? "bg-teal-50 text-teal-800 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800/60"
+                                : isItisam
+                                ? "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700"
+                                : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                            )}
+                          >
+                            <span className="font-semibold">
+                              {rf.source === "at-tahreek"
+                                ? "আত-তাহরীক"
+                                : rf.source === "al-kawsar"
+                                ? "আলকাউসার"
+                                : rf.source === "al-itisam"
+                                ? "আল-ইতিসাম"
+                                : rf.source}
+                            </span>
+                          </span>
+
+                          {/* Category Badge */}
+                          {rf.category && (
+                            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-zinc-200/60 dark:border-zinc-800 font-bengali truncate max-w-[140px]">
+                              {rf.category}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Verified Mark */}
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bengali shrink-0">
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span className="hidden xs:inline font-medium">যাচাইকৃত</span>
+                        </span>
+                      </div>
+
+                      {/* Question Title */}
+                      <h3 className="text-[15px] sm:text-base font-bold text-zinc-900 dark:text-zinc-100 font-bengali group-hover:text-emerald-600 dark:group-hover:text-emerald-400 line-clamp-2 leading-snug transition-colors">
+                        {rf.title}
+                      </h3>
+
+                      {/* Context Snippet */}
+                      {snippet && (
+                        <p className="text-xs sm:text-[13px] text-zinc-500 dark:text-zinc-400 font-bengali line-clamp-2 leading-relaxed mt-2">
+                          {snippet}
+                        </p>
+                      )}
                     </div>
-                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-bengali group-hover:text-emerald-600 dark:group-hover:text-emerald-400 line-clamp-2 transition-colors">
-                      {rf.title}
-                    </h3>
-                    {rf.scholar && (
-                      <p className="text-xs text-zinc-500 mt-2 flex items-center gap-1 font-bengali">
-                        <GraduationCap className="h-3 w-3 text-zinc-400" />
-                        <span>{rf.scholar}</span>
-                      </p>
-                    )}
+
+                    {/* Card Bottom Meta */}
+                    <div className="flex items-center justify-between gap-2 pt-3.5 mt-4 border-t border-zinc-100 dark:border-zinc-800/60 text-xs">
+                      <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 font-bengali min-w-0">
+                        {rf.scholar ? (
+                          <>
+                            <GraduationCap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span className="truncate max-w-[170px] sm:max-w-[200px] text-[11px] sm:text-xs">
+                              {rf.scholar}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[11px] text-zinc-400 font-mono">
+                            {rf.published_date ? formatDate(rf.published_date) : "প্রামাণিক আর্কাইভ"}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 font-bengali shrink-0 text-xs">
+                        <span>বিস্তারিত পড়ুন</span>
+                        <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
                   </Link>
                 );
               })}
+            </div>
+
+            {/* Quick Topic Exploration Bar */}
+            <div className="mt-8 p-4 sm:p-5 rounded-2xl bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-200/80 dark:border-zinc-800/80">
+              <div className="flex items-center gap-2 mb-3">
+                <Compass className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-200 font-bengali">
+                  বিষয়ভিত্তিক অন্যান্য প্রশ্নোত্তর অন্বেষণ করুন
+                </h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { name: "সালাত ও নামায", query: "সালাত (Prayer)" },
+                  { name: "সিয়াম ও রোযা", query: "সিয়াম (Fasting)" },
+                  { name: "যাকাত ও সাদাকাহ", query: "যাকাত ও সাদাকাহ (Zakat)" },
+                  { name: "পারিবারিক ও বিবাহ", query: "পারিবারিক ও বিবাহ (Family)" },
+                  { name: "মুয়ামালাত ও লেনদেন", query: "মুয়ামালাত ও লেনদেন (Transactions)" },
+                  { name: "হজ্জ ও উমরাহ", query: "হজ্জ ও উমরাহ (Hajj)" },
+                  { name: "আকীদাহ ও তাওহীদ", query: "আকীদাহ ও তাওহীদ (Creed)" },
+                  { name: "সাধারণ জিজ্ঞাসা", query: "সাধারণ জিজ্ঞাসা (General)" },
+                ].map((cat, idx) => (
+                  <Link
+                    key={idx}
+                    href={`/?category=${encodeURIComponent(cat.query)}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#151518] text-zinc-700 dark:text-zinc-300 border border-zinc-200/90 dark:border-zinc-800 hover:border-emerald-500/50 hover:text-emerald-600 dark:hover:text-emerald-400 shadow-sm transition-all font-bengali"
+                  >
+                    <span>{cat.name}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
         )}

@@ -84,8 +84,8 @@ export interface TranslationSchema {
 export const translations: Record<Language, TranslationSchema> = {
   bn: {
     header: {
-      brandTitle: "ইসলামিক ফতোয়া ও গবেষণা আর্কাইভ",
-      brandShortTitle: "ফতোয়া আর্কাইভ",
+      brandTitle: "Deen QnA - ইসলামিক প্রশ্নোত্তর ও ফতোয়া",
+      brandShortTitle: "Deen QnA",
       brandSubtitle: "/ আল-ইতিসাম • আত-তাহরীক • আলকাউসার",
       archiveStatus: "সংরক্ষণাগার সক্রিয়",
       archiveStatusShort: "লাইভ",
@@ -179,8 +179,8 @@ export const translations: Record<Language, TranslationSchema> = {
 
   en: {
     header: {
-      brandTitle: "Islamic Fatwa Archive",
-      brandShortTitle: "Fatwa Archive",
+      brandTitle: "Deen QnA | Islamic Fatwa Archive",
+      brandShortTitle: "Deen QnA",
       brandSubtitle: "/ Al-I'tisam • At-Tahreek • Al-Kawsar",
       archiveStatus: "Archive Active",
       archiveStatusShort: "Live",
@@ -274,8 +274,8 @@ export const translations: Record<Language, TranslationSchema> = {
 
   ar: {
     header: {
-      brandTitle: "أرشيف الفتاوى والبحوث الإسلامية",
-      brandShortTitle: "أرشيف الفتاوى",
+      brandTitle: "Deen QnA | أرشيف الفتاوى والبحوث الإسلامية",
+      brandShortTitle: "Deen QnA",
       brandSubtitle: "/ الاعتصام • التحريك • الكوثر",
       archiveStatus: "الأرشيف نشط",
       archiveStatusShort: "مباشر",

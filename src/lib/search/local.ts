@@ -282,6 +282,18 @@ export class LocalBengaliSearchEngine implements SearchEngine {
 
     // Extract AI Semantic Intent (cached in memory & safe 3.5s timeout)
     const aiIntent = await extractSemanticFiqhIntent(rawQuery);
+    if (aiIntent?.technical_fiqh_terms) {
+      aiIntent.technical_fiqh_terms.forEach((ft) => {
+        expandedSynonyms.add(ft);
+        highlightTerms.add(ft);
+      });
+    }
+    if (aiIntent?.expanded_keywords) {
+      aiIntent.expanded_keywords.forEach((ek) => {
+        expandedSynonyms.add(ek);
+        highlightTerms.add(ek);
+      });
+    }
     if (aiIntent?.fiqhConcepts) {
       aiIntent.fiqhConcepts.forEach((ft) => {
         expandedSynonyms.add(ft);
@@ -331,6 +343,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       .filter((t) => t.length >= 2 && !isStopWord(t));
 
     const fiqhConcepts = (aiIntent?.fiqhConcepts || []).map(cleanFtsTerm).filter(Boolean);
+    const technicalTerms = (aiIntent?.technical_fiqh_terms || []).map(cleanFtsTerm).filter(Boolean);
 
     // 2. High-Precision FTS5 Query Construction
     let ftsMatch = '';
@@ -343,9 +356,18 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         cleanFtsTerm(rawQuery),
         ...(aiIntent?.canonicalBengali ? [cleanFtsTerm(aiIntent.canonicalBengali)] : []),
         ...fiqhConcepts,
+        ...technicalTerms,
       ].filter((p) => p && p.length >= 2);
 
       phraseClauses.push(...Array.from(new Set(phrases)).map((p) => `"${p}"*`));
+
+      // AI Technical Fiqh Terms Conjunction (Direct Classical Islamic Terminology Bridge)
+      if (technicalTerms.length > 0) {
+        const topTech = technicalTerms.slice(0, 6).filter((t) => t.length >= 2 && !isStopWord(t));
+        if (topTech.length > 0) {
+          conjunctions.push('(' + topTech.map((t) => `"${t}"*`).join(' OR ') + ')');
+        }
+      }
 
       // AI Subject + Aspect Conjunction (The Primary Legal Intent Bridge)
       if (subjectPool.length > 0 && aspectPool.length > 0) {
@@ -357,7 +379,6 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       // Special handling for common posture / ritual queries (e.g. Sijda + Sitting)
       const hasSijdaWord = queryTokens.some((t) => t.includes('সিজদ'));
       const hasBosaWord = queryTokens.some((t) => t.includes('বস') || t.includes('বৈঠক'));
-
       if (hasSijdaWord && hasBosaWord) {
         conjunctions.push('("সিজদা"* AND "বসা"*)');
         conjunctions.push('("সিজদা"* AND "বৈঠক"*)');
@@ -494,6 +515,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         tookMs: Date.now() - startTime,
         engine: this.name,
         facets: getFacets(),
+        semanticIntent: aiIntent || undefined,
       };
     }
 
@@ -511,15 +533,19 @@ export class LocalBengaliSearchEngine implements SearchEngine {
     // Re-ranking & Precision Relevance Scoring
     const scoredDocs: Array<{ doc: FatwaQA; finalScore: number; matchedTerms: string[] }> = [];
 
-    const allFiqhTerms = [
-      'জালসায়ে ইস্তিরাহাত',
-      'ইস্তিরাহাত',
-      'দুই সিজদার মধ্যবর্তী বৈঠক',
-      'দুই সিজদার মাঝে বসা',
-      'সিজদার পর বসা',
-      'দুই সিজদার পর',
-      ...fiqhConcepts,
-    ].map((t) => t.toLowerCase());
+    const technicalFiqhTerms = (aiIntent?.technical_fiqh_terms || []).map((t) => t.toLowerCase());
+    const allFiqhTerms = Array.from(
+      new Set([
+        'জালসায়ে ইস্তিরাহাত',
+        'ইস্তিরাহাত',
+        'দুই সিজদার মধ্যবর্তী বৈঠক',
+        'দুই সিজদার মাঝে বসা',
+        'সিজদার পর বসা',
+        'দুই সিজদার পর',
+        ...fiqhConcepts,
+        ...technicalFiqhTerms,
+      ])
+    );
 
     for (const d of docs) {
       const doc: FatwaQA = {
@@ -556,7 +582,21 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         }
       }
 
-      // 2. AI Fiqh Concept Matches
+      // 2. High-Priority Technical Fiqh Term Matches (Highest Domain Weight)
+      for (const term of technicalFiqhTerms) {
+        if (titleLower.includes(term)) {
+          score += 360.0;
+          matchedForDoc.add(term);
+        } else if (questionLower.includes(term)) {
+          score += 280.0;
+          matchedForDoc.add(term);
+        } else if (answerLower.includes(term)) {
+          score += 150.0;
+          matchedForDoc.add(term);
+        }
+      }
+
+      // 3. AI Fiqh Concept Matches
       for (const term of allFiqhTerms) {
         if (titleLower.includes(term)) {
           score += 220.0;
@@ -725,6 +765,7 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       tookMs: Date.now() - startTime,
       engine: this.name,
       facets: getFacets(),
+      semanticIntent: aiIntent || undefined,
     };
   }
 }

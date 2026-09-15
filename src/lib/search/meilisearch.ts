@@ -5,6 +5,7 @@ import { generateHighlightedSnippet } from './local';
 import { transliterateQuery } from './transliterate';
 import { getSynonymsAndVariants } from './synonyms';
 import { normalizeBengaliText } from './normalizer';
+import { extractSemanticFiqhIntent } from '../ai/semantic';
 
 export class MeilisearchEngine implements SearchEngine {
   public name = 'Meilisearch (Bengali Optimized)';
@@ -60,12 +61,21 @@ export class MeilisearchEngine implements SearchEngine {
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
 
-    // Expand query with Banglish transliterations and synonyms
+    // Extract AI Fiqh intent
+    const aiIntent = await extractSemanticFiqhIntent(rawQuery);
+
+    // Expand query with Banglish transliterations, synonyms, and AI technical Fiqh terms
     const transliterated = transliterateQuery(rawQuery);
     const primaryQuery = transliterated.primaryBengali || rawQuery;
     const normalized = normalizeBengaliText(primaryQuery);
     const synonyms = normalized.split(/\s+/).flatMap((t) => getSynonymsAndVariants(t));
-    const finalSearchQuery = Array.from(new Set([normalized, ...transliterated.expandedTerms, ...synonyms.slice(0, 5)])).join(' ');
+    const aiTerms = [
+      ...(aiIntent?.technical_fiqh_terms || []),
+      ...(aiIntent?.expanded_keywords || []),
+    ];
+    const finalSearchQuery = Array.from(
+      new Set([normalized, ...transliterated.expandedTerms, ...synonyms.slice(0, 5), ...aiTerms.slice(0, 6)])
+    ).join(' ');
 
     const filters: string[] = [];
     if (options.source && options.source !== 'All') {
@@ -124,6 +134,7 @@ export class MeilisearchEngine implements SearchEngine {
         tookMs: Date.now() - startTime,
         engine: this.name,
         facets: getFacets(),
+        semanticIntent: aiIntent || undefined,
       };
     } catch (err) {
       console.warn('[MeilisearchEngine] Fallback to local search due to error:', err);
