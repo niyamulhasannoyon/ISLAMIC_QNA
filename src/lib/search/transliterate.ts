@@ -253,7 +253,7 @@ export const ISLAMIC_BANGLISH_DICT: Record<string, string[]> = {
   'ushr': ['উশর'],
   'oshor': ['উশর'],
   'shorno': ['স্বর্ণ', 'সোনা'],
-  'shona': ['সোনা', 'স্বর্ণ'],
+  'shona': ['সোনা', 'স্বর্ণ', 'শোনা', 'শ্রবণ'],
   'gold': ['স্বর্ণ', 'সোনা'],
   'rupa': ['রূপা', 'রুপা'],
   'silver': ['রূপা', 'রুপা'],
@@ -500,7 +500,7 @@ export const ISLAMIC_BANGLISH_DICT: Record<string, string[]> = {
   'korte': ['করতে'],
   'kori': ['করি'],
   'pora': ['পড়া', 'পড়া', 'তিলাওয়াত'],
-  'pore': ['পড়ে', 'পড়ে'],
+  'pore': ['পরে', 'পর', 'পড়ে', 'পড়ে'],
   'porle': ['পড়লে', 'পড়লে'],
   'porar': ['পড়ার', 'পড়ার', 'তিলাওয়াতের'],
   'porte': ['পড়তে', 'পড়তে'],
@@ -534,7 +534,6 @@ export const ISLAMIC_BANGLISH_DICT: Record<string, string[]> = {
   'katle': ['কাটলে', 'ছাঁটলে'],
   'dhora': ['ধরা', 'স্পর্শ', 'স্পর্শ করা'],
   'chowa': ['ছোঁয়া', 'স্পর্শ'],
-  'shona': ['শোনা', 'শ্রবণ'],
   'dekha': ['দেখা', 'দৃষ্টি'],
 
   // === 11. Intent, Prepositions & Question Words ===
@@ -582,7 +581,6 @@ export const ISLAMIC_BANGLISH_DICT: Record<string, string[]> = {
   'age': ['আগে', 'পূর্বে'],
   'purbe': ['পূর্বে', 'আগে'],
   'por': ['পর', 'পরে'],
-  'pore': ['পরে', 'পর'],
   'sese': ['শেষে', 'পর'],
   'shese': ['শেষে', 'পর'],
   'majhe': ['মাঝে', 'মধ্যে'],
