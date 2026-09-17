@@ -15,7 +15,7 @@ async function runVectorSearchTests() {
 
   // --- 1. Testing Query Normalization (LLM Step) ---
   console.log('=== 1. Testing Query Normalization Service ===');
-  const conversationalQuery = 'ami esarer namaj porte vule gechi fojorer pore ki porte parbo';
+  const conversationalQuery = 'ami esar namaj porte vule gechi fojorer pore ki porle problem hobe';
   console.log(`Raw Conversational Input: "${conversationalQuery}"`);
 
   const normResult = await normalizeSearchQuery(conversationalQuery);
@@ -23,8 +23,18 @@ async function runVectorSearchTests() {
   console.log(`Provider:                ${normResult.provider}`);
   console.log(`Latency:                 ${normResult.latencyMs}ms`);
 
-  if (!normResult.normalizedQuery || normResult.normalizedQuery.length < 2) {
-    throw new Error('Expected normalized query to return non-empty string');
+  if (!normResult.normalizedQuery.includes('এশার') || !normResult.normalizedQuery.includes('কাজা') || !normResult.normalizedQuery.includes('ফজরের পর')) {
+    throw new Error(`Expected normalized query to contain missed prayer terms ('এশার', 'কাজা', 'ফজরের পর'), got: "${normResult.normalizedQuery}"`);
+  }
+
+  // Test colloquial Bengali input
+  const banglaCasualQuery = 'আমি এশার নামজ পড়তে ভুলে গেসি ফজরের পর পড়লে কি প্রবলেম হবে';
+  const banglaNorm = await normalizeSearchQuery(banglaCasualQuery);
+  console.log(`Bangla Casual Input:     "${banglaCasualQuery}"`);
+  console.log(`Normalized Output:       "${banglaNorm.normalizedQuery}"`);
+
+  if (!banglaNorm.normalizedQuery.includes('এশার') || !banglaNorm.normalizedQuery.includes('কাজা')) {
+    throw new Error(`Expected colloquial Bengali query to map to missed prayer terms, got: "${banglaNorm.normalizedQuery}"`);
   }
 
   // Verify second run hits 0ms LRU cache
@@ -33,10 +43,10 @@ async function runVectorSearchTests() {
   if (cachedNorm.latencyMs !== 0) {
     console.warn(`Note: Cached latency was ${cachedNorm.latencyMs}ms (expected 0ms)`);
   }
-  console.log('Query Normalization test PASSED.\n');
+  console.log('Query Normalization tests PASSED.\n');
 
-  // --- 2. Testing Embedding Formatter ---
-  console.log('=== 2. Testing Document Embedding Formatter (title + " " + content) ===');
+  // --- 2. Testing Embedding Formatter & HTML Stripping ---
+  console.log('=== 2. Testing Document Embedding Formatter (${doc.title} ${doc.question || ""} ${doc.content || ""}) ===');
 
   if (VECTOR_DIMENSIONS !== 1536) {
     throw new Error(`Expected VECTOR_DIMENSIONS to be 1536, got ${VECTOR_DIMENSIONS}`);
@@ -45,18 +55,24 @@ async function runVectorSearchTests() {
     throw new Error(`Expected model to be text-embedding-3-small, got ${EMBEDDING_MODEL}`);
   }
 
+  const { formatDocForEmbedding, cleanHtml } = await import('../../scripts/generate-embeddings');
   const sampleDoc = {
-    title: 'এশার সালাত কাজা হলে পড়ার বিধান',
-    content: 'কোনো ব্যক্তি যদি এশার সালাত না পড়ে ঘুমিয়ে যায়, তবে জাগ্রত হওয়া মাত্রই তা কাজা আদায় করে নিতে হবে।',
+    title: '<h1>এশার <b>সালাত</b> কাজা হলে পড়ার বিধান</h1>',
+    question: '<p>আমি কি ফজরের পর এশার সালাত পড়তে পারব?</p>',
+    content: '<div>কোনো ব্যক্তি যদি এশার সালাত না পড়ে ঘুমিয়ে যায়, তবে জাগ্রত হওয়া মাত্রই তা কাজা আদায় করে নিতে হবে।<br/></div>',
   };
 
-  const formattedDoc = formatDocumentForEmbedding(sampleDoc);
+  const formattedDoc = formatDocForEmbedding(sampleDoc);
   console.log('Formatted document text:\n', formattedDoc);
 
-  if (!formattedDoc.startsWith('এশার সালাত কাজা হলে পড়ার বিধান') || !formattedDoc.includes('জাগ্রত হওয়া মাত্রই')) {
-    throw new Error('formatDocumentForEmbedding failed to combine title + " " + content correctly');
+  if (formattedDoc.includes('<h1>') || formattedDoc.includes('<b>') || formattedDoc.includes('<br/>')) {
+    throw new Error('Expected HTML tags to be stripped from formatted document');
   }
-  console.log('Embedding formatter test PASSED.\n');
+
+  if (!formattedDoc.startsWith('এশার সালাত কাজা হলে পড়ার বিধান') || !formattedDoc.includes('জাগ্রত হওয়া মাত্রই')) {
+    throw new Error('formatDocForEmbedding failed to combine title + question + content correctly');
+  }
+  console.log('Embedding formatter & HTML stripping test PASSED.\n');
 
   // --- 3. Testing MongoAtlasSearchEngine Pipeline Definition ---
   console.log('=== 3. Testing MongoDB Atlas Vector Search Pipeline Verification ===');

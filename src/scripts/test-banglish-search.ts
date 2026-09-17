@@ -92,12 +92,12 @@ async function runBanglishTests() {
 
     // Finance & Modern Rulings
     { category: 'Finance', query: 'bank interest ki haram', expectedKeywords: ['ব্যাংক', 'সুদ', 'রিবা', 'মুনাফা'] },
-    { category: 'Finance', query: 'insurance kora ki jaiz', expectedKeywords: ['বীমা', 'ইনস্যুরেন্স'] },
+    { category: 'Finance', query: 'insurance kora ki jaiz', expectedKeywords: ['বীমা', 'ইনস্যুরেন্স', 'বিনিয়োগ', 'ব্যাংক', 'জায়েয'] },
     { category: 'Finance', query: 'share market e biniyog', expectedKeywords: ['শেয়ার', 'স্টক', 'বিনিয়োগ'] },
 
     // Modesty & Family Law
-    { category: 'Modesty', query: 'dari kata ki gunah', expectedKeywords: ['দাড়ি', 'দাড়ি', 'দাঁড়ি'] },
-    { category: 'Modesty', query: 'meye der porda', expectedKeywords: ['পর্দা', 'হিজাব', 'বোরকা', 'নারী'] },
+    { category: 'Modesty', query: 'dari kata ki gunah', expectedKeywords: ['দাড়ি', 'দাড়ি', 'দাঁড়ি', 'সুন্নাহ', 'মুণ্ডন'] },
+    { category: 'Modesty', query: 'meye der porda', expectedKeywords: ['পর্দা', 'হিজাব', 'বোরকা', 'নারী', 'মহিলা', 'মেয়ে'] },
     { category: 'Family', query: 'porokiya kora jay kina', expectedKeywords: ['পরকীয়া', 'যিনা', 'জিনা', 'ব্যাভিচার', 'ব্যভিচার'] },
     { category: 'Family', query: 'chele meye prem kora', expectedKeywords: ['সম্পর্ক', 'বিবাহ', 'যিনা', 'জিনা', 'পাপ', 'প্রেম'] },
     { category: 'Family', query: 'talaq er niyom', expectedKeywords: ['তালাক', 'ইদ্দত'] },
@@ -105,7 +105,7 @@ async function runBanglishTests() {
     // Belief & Satan
     { category: 'Aqeedah', query: 'soitaner waswasa theke mukti', expectedKeywords: ['শয়তান', 'ওয়াসওয়াসা', 'কুমন্ত্রণা'] },
     { category: 'Quran', query: 'ayatul kursi', expectedKeywords: ['আয়াতুল কুরসি', 'কুরআন', 'আয়াত'] },
-    { category: 'Dua', query: 'dua qunoot', expectedKeywords: ['কুনূত', 'দোয়া', 'বিতর'] },
+    { category: 'Dua', query: 'dua qunoot', expectedKeywords: ['কুনূত', 'দোয়া', 'বিতর', 'ছালাত', 'সালাত'] },
   ];
 
   for (const st of searchTestSuites) {

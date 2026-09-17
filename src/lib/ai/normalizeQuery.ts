@@ -117,7 +117,7 @@ export async function normalizeSearchQuery(rawQuery: string): Promise<Normalized
             { role: 'user', content: trimmed },
           ],
           temperature: 0.1,
-          max_tokens: 32,
+          max_tokens: 30,
         }),
         signal: controller.signal,
       });
@@ -164,7 +164,7 @@ export async function normalizeSearchQuery(rawQuery: string): Promise<Normalized
             { role: 'user', content: trimmed },
           ],
           temperature: 0.1,
-          max_tokens: 32,
+          max_tokens: 30,
         }),
         signal: controller.signal,
       });

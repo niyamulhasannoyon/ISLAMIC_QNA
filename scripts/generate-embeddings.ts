@@ -2,16 +2,19 @@
 /**
  * Standalone MongoDB Atlas Vector Embedding Migration & Backfill Tool
  * 
- * Generates 1536-dimensional vector embeddings for existing fatwa documents
- * using OpenAI's 'text-embedding-3-small' model on formatted 'title + " " + content'.
+ * Generates 1536-dimensional vector embeddings for fatwa documents
+ * using OpenAI's 'text-embedding-3-small' model on combined:
+ * `${doc.title} ${doc.question || ''} ${doc.content || ''}`
  * 
  * Features:
- * - Standalone execution: npx tsx scripts/generate-embeddings.ts
- * - Automatic environment loading (.env.local & .env)
- * - Rate-limit compliance with exponential backoff on HTTP 429
- * - Batching with MongoDB bulkWrite operations
- * - CLI flags: --batch=<n>, --limit=<n>, --force, --dry-run
- * - Live progress, rate (docs/sec), and ETA calculations
+ * - Scans documents matching `{ embedding: { $exists: false } }` (or null/empty)
+ * - Strips HTML tags and normalizes whitespace
+ * - Truncates safely up to 8000 tokens (~24,000 characters)
+ * - Batches requests (50 documents/request) to OpenAI API
+ * - Uses MongoDB collection.bulkWrite with updateOne
+ * - Exponential backoff retry logic with jitter on HTTP 429 and network errors
+ * - Terminal progress bar, docs/sec throughput, and ETA calculation
+ * - Supports CLI flags: --batch=<n>, --limit=<n>, --force, --dry-run
  */
 
 import fs from 'fs';
@@ -23,9 +26,12 @@ import OpenAI from 'openai';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const VECTOR_DIMENSIONS = 1536;
 const DEFAULT_BATCH_SIZE = 50;
-const MAX_CHARS_PER_DOC = 2000;
+// text-embedding-3-small max context is 8,191 tokens.
+// In Bengali & English, 1 token is approx ~3 characters.
+// 24,000 characters safely yields ~7,500-8,000 tokens without overflowing.
+const MAX_CHARS_SAFE_8000_TOKENS = 24000;
 
-// Load environment variables manually from .env.local or .env if not loaded by runner
+// Load environment variables from .env.local and .env
 function loadEnvironment(): void {
   const envFiles = ['.env.local', '.env'];
   for (const file of envFiles) {
@@ -84,8 +90,8 @@ Usage: npx tsx scripts/generate-embeddings.ts [options]
 Options:
   --batch=<number>   Number of documents per OpenAI batch request (default: 50)
   --limit=<number>   Maximum number of documents to embed (default: 0 = all)
-  --force            Re-embed documents even if they already have an embedding
-  --dry-run          Preview documents to be processed without writing to MongoDB
+  --force            Re-embed all documents even if embedding already exists
+  --dry-run          Preview documents to be processed without updating MongoDB
   -h, --help         Show this help message
 `);
       process.exit(0);
@@ -96,35 +102,54 @@ Options:
 }
 
 /**
- * Formats a document into 'title + " " + content' representation.
+ * Strips HTML tags and unescapes common HTML entities.
  */
-function formatForEmbedding(doc: {
-  title?: string;
-  content?: string;
-  question?: string;
-  answer?: string;
-}): string {
-  const title = (doc.title || '').trim();
-  const rawContent = (doc.content || '').trim();
-  const question = (doc.question || '').trim();
-  const answer = (doc.answer || '').trim();
-
-  let body = '';
-  if (rawContent) {
-    body = rawContent;
-  } else if (question && question !== title) {
-    body = `${question}\n${answer}`;
-  } else {
-    body = answer;
-  }
-
-  // Combine title + " " + content per architecture specification
-  const combined = `${title} ${body}`.trim();
-  return combined.slice(0, MAX_CHARS_PER_DOC);
+export function cleanHtml(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
- * Executes a batch embedding request against OpenAI with exponential backoff.
+ * Combines relevant text fields for embedding:
+ * `${doc.title} ${doc.question || ''} ${doc.content || ''}`
+ * (cleans HTML tags, collapses whitespace, and truncates safely up to 8000 tokens).
+ */
+export function formatDocForEmbedding(doc: {
+  title?: string;
+  question?: string;
+  content?: string;
+  answer?: string;
+}): string {
+  const title = cleanHtml(doc.title || '');
+  const question = cleanHtml(doc.question || '');
+  // Fatwas in MongoDB can store the body in 'content' or 'answer'
+  const content = cleanHtml(doc.content || doc.answer || '');
+
+  let combined = `${title} ${question} ${content}`.replace(/\s+/g, ' ').trim();
+
+  // If text exceeds safe 8000 token limit (~24,000 characters), truncate gracefully at word boundary
+  if (combined.length > MAX_CHARS_SAFE_8000_TOKENS) {
+    const truncated = combined.slice(0, MAX_CHARS_SAFE_8000_TOKENS);
+    const lastSpace = truncated.lastIndexOf(' ');
+    combined = (lastSpace > MAX_CHARS_SAFE_8000_TOKENS - 200 ? truncated.slice(0, lastSpace) : truncated).trim();
+  }
+
+  return combined;
+}
+
+/**
+ * Generates embeddings for an array of texts with exponential backoff & jitter.
  */
 async function generateEmbeddingsWithRetry(
   openai: OpenAI,
@@ -151,16 +176,18 @@ async function generateEmbeddingsWithRetry(
       break;
     } catch (err: any) {
       attempt++;
-      const isRateLimit = err?.status === 429 || err?.message?.includes('rate');
-      const waitMs = Math.min(60000, Math.pow(2, attempt) * 1000 + Math.random() * 500);
+      const isRateLimit = err?.status === 429 || err?.message?.toLowerCase().includes('rate');
+      const baseWait = Math.pow(2, attempt) * 1000;
+      const jitter = Math.random() * 800;
+      const waitMs = Math.min(45000, baseWait + jitter);
 
       console.warn(
-        `[Retry ${attempt}/${maxRetries}] ${isRateLimit ? 'Rate limit hit (429)' : 'OpenAI API error'}. Waiting ${(waitMs / 1000).toFixed(1)}s...`
+        `\n  ⚠️  [Retry ${attempt}/${maxRetries}] ${isRateLimit ? 'Rate limit hit (429)' : 'OpenAI API error'}: ${err?.message || err}. Pausing ${(waitMs / 1000).toFixed(1)}s...`
       );
 
       if (attempt >= maxRetries) {
-        console.error(`[Error]: Batch of ${texts.length} items failed after ${maxRetries} retries.`);
-        // Fallback to individual items for resilience
+        console.error(`\n  ❌ Batch of ${texts.length} failed after ${maxRetries} attempts. Falling back to single-item requests...`);
+        // Fallback: Attempt each document individually so valid docs aren't lost
         for (let i = 0; i < sanitized.length; i++) {
           try {
             const single = await openai.embeddings.create({
@@ -168,7 +195,8 @@ async function generateEmbeddingsWithRetry(
               input: sanitized[i],
             });
             results[i] = single.data[0].embedding;
-          } catch {
+          } catch (singleErr: any) {
+            console.error(`     - Failed item #${i}: ${singleErr?.message || singleErr}`);
             results[i] = null;
           }
         }
@@ -182,24 +210,35 @@ async function generateEmbeddingsWithRetry(
   return results;
 }
 
+/**
+ * Renders a visual ASCII progress bar in stdout.
+ */
+function renderProgressBar(current: number, total: number, barLength = 25): string {
+  const ratio = total > 0 ? Math.min(1, current / total) : 0;
+  const filled = Math.round(ratio * barLength);
+  const empty = barLength - filled;
+  const bar = '█'.repeat(filled) + '░'.repeat(empty);
+  return `[${bar}]`;
+}
+
 async function main() {
   const options = parseCliArgs();
 
   console.log('===========================================================');
-  console.log('  MongoDB Atlas Vector Search Embedding Batch Migrator    ');
+  console.log('   DeenQnA: MongoDB Atlas Vector Embedding Migration       ');
   console.log('===========================================================\n');
 
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
-    console.error('ERROR: MONGODB_URI is not set in environment or .env.local.');
-    console.error('Please configure MONGODB_URI with your Atlas connection string.');
+    console.error('❌ ERROR: MONGODB_URI is not set in environment or .env.local.');
+    console.error('   Please configure MONGODB_URI with your MongoDB Atlas connection string.');
     process.exit(1);
   }
 
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) {
-    console.error('ERROR: OPENAI_API_KEY is not set in environment or .env.local.');
-    console.error('Please configure OPENAI_API_KEY with your OpenAI API key.');
+    console.error('❌ ERROR: OPENAI_API_KEY is not set in environment or .env.local.');
+    console.error('   Please configure OPENAI_API_KEY with your OpenAI API key.');
     process.exit(1);
   }
 
@@ -212,13 +251,14 @@ async function main() {
   });
 
   await client.connect();
-  console.log('Successfully connected to MongoDB Atlas.');
+  console.log('✅ Connected to MongoDB Atlas successfully.');
 
-  const db = client.db(process.env.MONGODB_DB_NAME || 'fatwas_db');
+  const dbName = process.env.MONGODB_DB_NAME || 'fatwas_db';
+  const db = client.db(dbName);
   const collection = db.collection('fatwas');
 
-  // Match documents needing embeddings
-  const query: any = options.force
+  // Find documents needing embeddings: { embedding: { $exists: false } } (or null/empty unless --force)
+  const filterQuery: any = options.force
     ? {}
     : {
         $or: [
@@ -228,56 +268,61 @@ async function main() {
         ],
       };
 
-  const totalUnprocessed = await collection.countDocuments(query);
-  console.log(`Documents to embed in 'fatwas' collection: ${totalUnprocessed}`);
+  const totalUnprocessed = await collection.countDocuments(filterQuery);
+  console.log(`Documents to embed in '${collection.collectionName}': ${totalUnprocessed}`);
 
   if (totalUnprocessed === 0) {
-    console.log('All documents already have vector embeddings! Nothing to do.');
+    console.log('\n🎉 All documents in the collection already have vector embeddings! Nothing to do.');
     await client.close();
     process.exit(0);
   }
 
   const targetCount = options.limit > 0 ? Math.min(options.limit, totalUnprocessed) : totalUnprocessed;
 
-  console.log(`\nConfiguration:`);
-  console.log(`- Model:      ${EMBEDDING_MODEL} (${VECTOR_DIMENSIONS} dimensions)`);
-  console.log(`- Target:     ${targetCount} documents`);
-  console.log(`- Batch Size: ${options.batchSize} items/request`);
-  console.log(`- Dry Run:    ${options.dryRun ? 'YES (no updates saved)' : 'NO'}`);
-  console.log(`-----------------------------------------------------------\n`);
+  console.log('\nMigration Configuration:');
+  console.log(`- Model:          ${EMBEDDING_MODEL} (${VECTOR_DIMENSIONS} dimensions)`);
+  console.log(`- Database:       ${dbName}`);
+  console.log(`- Collection:     ${collection.collectionName}`);
+  console.log(`- Target Docs:    ${targetCount}`);
+  console.log(`- Batch Size:     ${options.batchSize} docs/request`);
+  console.log(`- Dry Run:        ${options.dryRun ? 'YES (preview only, no DB writes)' : 'NO'}`);
+  console.log('-----------------------------------------------------------\n');
 
   let processedCount = 0;
   let successCount = 0;
   const startTime = Date.now();
 
   while (processedCount < targetCount) {
-    const currentLimit = Math.min(options.batchSize, targetCount - processedCount);
+    const currentBatchLimit = Math.min(options.batchSize, targetCount - processedCount);
 
+    // Fetch batch of documents
     const docs = await collection
-      .find(query, {
+      .find(filterQuery, {
         projection: {
           _id: 1,
           id: 1,
           title: 1,
-          content: 1,
           question: 1,
+          content: 1,
           answer: 1,
           category: 1,
           scholar: 1,
         },
       })
-      .limit(currentLimit)
+      .limit(currentBatchLimit)
       .toArray();
 
     if (!docs || docs.length === 0) break;
 
-    const formattedTexts = docs.map((d: any) => formatForEmbedding(d));
+    // Combine relevant text fields: `${doc.title} ${doc.question || ''} ${doc.content || ''}`
+    const formattedTexts = docs.map((doc: any) => formatDocForEmbedding(doc));
 
     if (!options.dryRun) {
+      // Generate batch embeddings via OpenAI
       const embeddings = await generateEmbeddingsWithRetry(openai, formattedTexts);
 
       const bulkOps: any[] = [];
-      const now = new Date().toISOString();
+      const nowIso = new Date().toISOString();
 
       for (let i = 0; i < docs.length; i++) {
         const vec = embeddings[i];
@@ -288,7 +333,7 @@ async function main() {
               update: {
                 $set: {
                   embedding: vec,
-                  embedded_at: now,
+                  embedded_at: nowIso,
                 },
               },
             },
@@ -296,9 +341,10 @@ async function main() {
         }
       }
 
+      // Execute bulkWrite
       if (bulkOps.length > 0) {
-        const res = await collection.bulkWrite(bulkOps, { ordered: false });
-        successCount += res.modifiedCount || 0;
+        const bulkResult = await collection.bulkWrite(bulkOps, { ordered: false });
+        successCount += (bulkResult.modifiedCount || 0) + (bulkResult.upsertedCount || 0);
       }
     } else {
       successCount += docs.length;
@@ -306,41 +352,53 @@ async function main() {
 
     processedCount += docs.length;
 
-    // Calculate metrics
+    // Calculate rates and ETA
     const elapsedSec = (Date.now() - startTime) / 1000;
     const rate = processedCount / (elapsedSec || 0.001);
     const percent = ((processedCount / targetCount) * 100).toFixed(1);
     const remainingDocs = targetCount - processedCount;
     const remainingSec = Math.max(0, Math.round(remainingDocs / (rate || 1)));
+    const etaMins = Math.floor(remainingSec / 60);
+    const etaSecs = remainingSec % 60;
+    const pBar = renderProgressBar(processedCount, targetCount);
 
     console.log(
-      `[Progress] ${processedCount}/${targetCount} (${percent}%) | ` +
+      `${pBar} Processed ${processedCount}/${targetCount} documents (${percent}%) | ` +
       `Success: ${successCount} | ` +
       `Rate: ${rate.toFixed(1)} docs/sec | ` +
-      `ETA: ${Math.floor(remainingSec / 60)}m ${remainingSec % 60}s`
+      `ETA: ${etaMins}m ${etaSecs}s`
     );
 
-    // Subtle 150ms throttle between batches to avoid bursting TPM limits
+    // Polite 100ms throttle between batches to avoid sudden burst rate limits
     if (!options.dryRun && processedCount < targetCount) {
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
   const totalTimeSec = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log('\n===========================================================');
-  console.log('  Embedding Generation Complete!                          ');
+  console.log('  🎉 Embedding Migration Complete!                         ');
   console.log('===========================================================');
-  console.log(`- Total Processed: ${processedCount}`);
-  console.log(`- Total Embedded:  ${successCount}`);
-  console.log(`- Total Time:      ${totalTimeSec}s`);
-  console.log(`- Collection:      fatwas`);
-  console.log(`- Status:          Ready for Atlas Vector Search ($vectorSearch)\n`);
+  console.log(`- Documents Processed: ${processedCount}`);
+  console.log(`- Documents Embedded:  ${successCount}`);
+  console.log(`- Elapsed Time:        ${totalTimeSec}s`);
+  console.log(`- Database:            ${dbName}`);
+  console.log(`- Collection:          ${collection.collectionName}`);
+  console.log(`- Status:              Ready for MongoDB Atlas $vectorSearch\n`);
 
   await client.close();
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error('Fatal error during embedding generation:', err);
-  process.exit(1);
-});
+const isDirectCliRun =
+  process.argv[1] &&
+  (process.argv[1].endsWith('generate-embeddings.ts') ||
+    process.argv[1].endsWith('generate-embeddings.js') ||
+    process.argv[1].endsWith('generate-embeddings'));
+
+if (isDirectCliRun) {
+  main().catch((err) => {
+    console.error('\n❌ Fatal error during embedding migration:', err);
+    process.exit(1);
+  });
+}

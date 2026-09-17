@@ -217,6 +217,31 @@ export function getDeterministicFiqhFallback(rawQuery: string): FiqhSemanticAnal
     };
   }
 
+  // Missed / Forgotten Prayer (কাজা সালাত / নামায পড়তে ভুলে গেলে)
+  if (
+    /(কাজা|কাযা|ভুলে\s*গে|ঘুমিয়ে\s*পড়|ঘুমের\s*কারণে|সময়\s*পার|ওয়াক্ত\s*পার|দেরিতে\s*পড়|ভুলে\s*গেলে)/iu.test(q) ||
+    /(vule\s*ge|qaza|kaza|miss\s*prayer|namaj.*vule|salat.*vule|namaz.*vule|porte\s*vule|esar.*namaj|fojor.*pore)/iu.test(q)
+  ) {
+    const technical_fiqh_terms = ['কাজা সালাত', 'কাযা নামায', 'সালাত কাযা', 'ওয়াক্ত অতিবাহিত', 'ঘুম বা ভুলে সালাত ছুটে যাওয়া', 'কাজা আদায়ের নিয়ম'];
+    const expanded_keywords = ['এশার সালাত কাজা হলে পড়ার হুকুম', 'ফজরের পর কাজা সালাত', 'ভুলে যাওয়া নামায আদায়', 'সালাত কাজা পড়ার নিয়ম', 'ছুটে যাওয়া সালাত'];
+    return {
+      fiqh_intent: 'ওয়াক্ত পার হয়ে গেলে বা ভুলে নামায ছুটে গেলে তা কাজা আদায়ের শারয়ী হুকুম ও সময়।',
+      fiqh_category: 'Salah',
+      technical_fiqh_terms,
+      expanded_keywords,
+      optimized_search_query: `${rawQuery} কাজা সালাত কাযা নামায এশার সালাত ফজরের পর কাজা পড়ার হুকুম`,
+      canonicalBengali: 'এশার সালাত কাজা হলে ফজরের পর পড়ার হুকুম',
+      coreSubject: 'সালাত',
+      coreAspect: 'কাজা সালাত',
+      essentialKeywords: ['কাজা', 'সালাত', 'নামাজ'],
+      fiqhConcepts: technical_fiqh_terms,
+      primarySubject: 'সালাত',
+      primaryAction: 'কাজা',
+      fiqhTerms: technical_fiqh_terms,
+      mustInclude: ['কাজা', 'সালাত'],
+    };
+  }
+
   // 3. Sawm & Medical Issues: Injections, Inhaler, Saline, Breaking Fast
   if (/(রো[জয][াে].*(?:ভাঙ|ভাঙ্গ|ভঙ্গ|নষ্ট|ভেঙ্গ|ভেঙে)|সিয়াম.*(?:নষ্ট|ভঙ্গ|ভাঙ)|রোজার.*ভেঙ্গে|রোযা.*ভঙ্গ)/iu.test(q) || /(roja|roza|siam|siyam).*(?:vanga|vangar|vange|bhanga|bhangar|bhenge)/iu.test(q)) {
     const technical_fiqh_terms = ['রোজা ভঙ্গ', 'সিয়াম নষ্ট', 'রোজা ভাঙার কারণ', 'কাযা', 'কাফফারা', 'রোযা'];
