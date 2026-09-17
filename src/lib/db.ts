@@ -676,9 +676,40 @@ export function getFacets(): SearchFacets {
   const categoryRows = stmts.categories.all() as { name: string; count: number }[];
   const scholarRows = stmts.scholars.all() as { name: string; count: number }[];
 
+  // Consolidate categories across archives (e.g. Prayer and Hajj variants)
+  const { CANONICAL_CATEGORIES } = require('./search/categoryUtils');
+  const catMap = new Map<string, number>();
+  for (const c of categoryRows) {
+    catMap.set(c.name, c.count);
+  }
+
+  const consolidatedCategories: { name: string; count: number }[] = [];
+  const handledRaw = new Set<string>();
+
+  for (const canon of CANONICAL_CATEGORIES) {
+    let sum = 0;
+    for (const dbName of canon.dbCategories) {
+      if (catMap.has(dbName)) {
+        sum += catMap.get(dbName)!;
+        handledRaw.add(dbName);
+      }
+    }
+    if (sum > 0) {
+      consolidatedCategories.push({ name: canon.name, count: sum });
+    }
+  }
+
+  for (const c of categoryRows) {
+    if (!handledRaw.has(c.name)) {
+      consolidatedCategories.push(c);
+    }
+  }
+
+  consolidatedCategories.sort((a, b) => b.count - a.count);
+
   const data: SearchFacets = {
     sources: sourceRows,
-    categories: categoryRows,
+    categories: consolidatedCategories,
     scholars: scholarRows,
   };
 

@@ -42,6 +42,14 @@ async function createAtlasVectorIndex() {
         numDimensions: VECTOR_DIMENSIONS,
         similarity: 'cosine',
       },
+      {
+        type: 'filter',
+        path: 'source',
+      },
+      {
+        type: 'filter',
+        path: 'category',
+      },
     ],
   };
 

@@ -145,7 +145,7 @@ export function AdminDashboardClient({
   scholars,
 }: AdminDashboardClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'overview' | 'manage' | 'add'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'manage' | 'add' | 'sync'>('overview');
 
   // Analytics State
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'today' | '7d' | '30d' | 'all'>('today');
@@ -424,6 +424,18 @@ export function AdminDashboardClient({
         >
           <PlusCircle className="h-4 w-4" />
           <span>{editingItem ? 'ফতোয়া সম্পাদনা' : 'নতুন ফতোয়া যোগ করুন'}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sync')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            activeTab === 'sync'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+          }`}
+        >
+          <RefreshCw className="h-4 w-4" />
+          <span>মাসিক অটো-সিঙ্ক (Auto-Sync)</span>
         </button>
       </div>
 
@@ -1213,6 +1225,165 @@ export function AdminDashboardClient({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Tab 4: Monthly Auto-Sync & Automation */}
+      {activeTab === 'sync' && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-emerald-600/10 via-teal-600/10 to-transparent border border-emerald-500/20 p-6 rounded-2xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5 text-emerald-600 animate-spin-slow" />
+                  <span>মাসিক অটোমেটেড স্ক্র্যাপার ও লাইভ সিঙ্ক (Monthly Auto-Sync Pipeline)</span>
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-2xl leading-relaxed">
+                  প্রতি মাসে আল-ইতিসাম, আত-তাহরীক এবং আলকাউসার ওয়েবসাইটে নতুন প্রশ্ন-উত্তর প্রকাশিত হওয়ার পর স্বয়ংক্রিয়ভাবে স্ক্র্যাপ করে আপনার সাইটে যুক্ত করা হয়।
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  শিডিউলার সক্রিয় (Active)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3 Source Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Source 1: Al-Itisam */}
+            <div className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">মাসিক পত্রিকা</span>
+                <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full font-mono font-medium">অটো-সিঙ্ক</span>
+              </div>
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">মাসিক আল-ইতিসাম (Al-I&apos;tisam)</h4>
+              <p className="text-xs text-zinc-500">
+                কুরআন ও সুন্নাহর আলোকে পরিচালিত। প্রতি মাসে নতুন সংখ্যা প্রকাশিত হলে ‘সাওয়াল জওয়াব’ বিভাগ থেকে স্বয়ংক্রিয়ভাবে প্রশ্ন-উত্তর সংগৃহীত হয়।
+              </p>
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">টার্গেট লিংক:</span>
+                <a
+                  href="https://al-itisam.com/question-answers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-600 hover:underline flex items-center gap-1"
+                >
+                  al-itisam.com <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+
+            {/* Source 2: At-Tahreek */}
+            <div className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">মাসিক পত্রিকা</span>
+                <span className="text-[10px] bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400 px-2 py-0.5 rounded-full font-mono font-medium">অটো-সিঙ্ক</span>
+              </div>
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">মাসিক আত-তাহরীক (At-Tahreek)</h4>
+              <p className="text-xs text-zinc-500">
+                ড. মুহাম্মাদ আসাদুল্লাহ আল-গালিব রচিত ও সম্পাদিত প্রশ্নোত্তর। প্রতি মাসের সংখ্যা থেকে প্রশ্নোত্তর বিভাগ ক্যাটাগরি আর্কাইভ ৮-এ স্বয়ংক্রিয়ভাবে স্ক্র্যাপ হয়।
+              </p>
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">টার্গেট লিংক:</span>
+                <a
+                  href="https://at-tahreek.com/category_archive/8"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal-600 hover:underline flex items-center gap-1"
+                >
+                  at-tahreek.com <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+
+            {/* Source 3: Al-Kawsar */}
+            <div className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">মাসিক পত্রিকা</span>
+                <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-mono font-medium">অটো-সিঙ্ক</span>
+              </div>
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">মাসিক আলকাউসার (Al-Kawsar)</h4>
+              <p className="text-xs text-zinc-500">
+                মারকাযুদ দাওয়াহ আল-ইসলামিয়া পরিচালিত ফতোয়া বিভাগ। প্রতি মাসের প্রথম সপ্তাহে প্রকাশিত নতুন ফতোয়াগুলো স্বয়ংক্রিয়ভাবে দলীলসহ সংগৃহীত হয়।
+              </p>
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">টার্গেট লিংক:</span>
+                <a
+                  href="https://www.alkawsar.com/bn/qa/answers/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 hover:underline flex items-center gap-1"
+                >
+                  alkawsar.com <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Workflow & Scheduling Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-emerald-600" />
+                <span>স্বয়ংক্রিয় শিডিউলার যেভাবে কাজ করে</span>
+              </h3>
+
+              <div className="space-y-3 text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 flex gap-3">
+                  <div className="h-6 w-6 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold text-xs shrink-0">১</div>
+                  <div>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">মাসিক স্বয়ংক্রিয় ক্রন শিডিউল:</span>
+                    <p className="mt-0.5">GitHub Actions প্রতি মাসের ১ তারিখ ও ৫ তারিখ বাংলাদেশ সময় সকাল ০৬:০০ টায় ক্রলার চালু করে।</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 flex gap-3">
+                  <div className="h-6 w-6 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold text-xs shrink-0">২</div>
+                  <div>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">স্মার্ট ডিডুপ্লিকেশন (Idempotency):</span>
+                    <p className="mt-0.5">ডাটাবেজের ২০,০০০+ বিদ্যমান ফতোয়ার ক্রিপ্টোগ্রাফিক SHA-256 হ্যাশ চেক করা হয়। শুধু নতুন যোগ হওয়া প্রশ্নগুলোই ইনজেস্ট হয়।</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 flex gap-3">
+                  <div className="h-6 w-6 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold text-xs shrink-0">৩</div>
+                  <div>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">অটো ডেপ্লয়মেন্ট ও লাইভ আপডেট:</span>
+                    <p className="mt-0.5">নতুন প্রশ্ন যুক্ত হলে স্বয়ংক্রিয়ভাবে গিটহাবে পুশ হয় এবং Vercel তাৎক্ষণিকভাবে আপনার লাইভ ওয়েবসাইট আপডেট করে দেয়।</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#121215] border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-teal-600" />
+                <span>ম্যানুয়াল রান ও কুইক কমান্ড</span>
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 bg-zinc-950 text-zinc-200 rounded-xl font-mono text-[11px] leading-relaxed border border-zinc-800">
+                  <div className="text-zinc-500 mb-1"># সব সোর্স থেকে মাসিক নতুন প্রশ্ন স্ক্র্যাপ করুন:</div>
+                  <div className="text-emerald-400 font-semibold select-all">python3 scraper/incremental_scraper.py --source all</div>
+                </div>
+
+                <div className="p-3.5 bg-zinc-950 text-zinc-200 rounded-xl font-mono text-[11px] leading-relaxed border border-zinc-800">
+                  <div className="text-zinc-500 mb-1"># সেভ না করে প্রিভিউ (Dry Run) দেখতে:</div>
+                  <div className="text-emerald-400 font-semibold select-all">python3 scraper/incremental_scraper.py --dry-run</div>
+                </div>
+
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/60 text-xs text-emerald-800 dark:text-emerald-300">
+                  <span className="font-semibold block mb-0.5">💡 GitHub Actions থেকে ১-ক্লিকে রান:</span>
+                  GitHub রিপোজিটরির <strong>Actions</strong> ট্যাবে গিয়ে <strong>Automatic Fatwa Monthly Live Sync</strong> সিলেক্ট করে <strong>Run workflow</strong> বাটনে ক্লিক করলেই ক্লাউডে স্বয়ংক্রিয়ভাবে স্ক্র্যাপ শুরু হবে।
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

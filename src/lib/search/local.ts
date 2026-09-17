@@ -7,6 +7,11 @@ import { transliterateQuery } from './transliterate';
 import { getSynonymsAndVariants, isAblutionTerm } from './synonyms';
 import { extractSemanticFiqhIntent } from '../ai/semantic';
 import { SearchEngine } from './types';
+import {
+  getSqliteCategoryCondition,
+  interleaveBySource,
+  STANDARD_SOURCES,
+} from './categoryUtils';
 
 function escapeHtml(unsafe: string): string {
   return unsafe
@@ -186,9 +191,10 @@ export class LocalBengaliSearchEngine implements SearchEngine {
         whereClauses.push('LOWER(source) = ?');
         params.push(sourceFilter);
       }
-      if (categoryFilter) {
-        whereClauses.push('LOWER(category) = ?');
-        params.push(categoryFilter);
+      const catCond = getSqliteCategoryCondition(categoryFilter, '');
+      if (catCond) {
+        whereClauses.push(catCond.sql);
+        params.push(...catCond.params);
       }
       if (scholarFilter) {
         whereClauses.push('LOWER(scholar) LIKE ?');
@@ -200,13 +206,59 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       const countRow = db.prepare(`SELECT count(*) as count FROM fatwas ${whereSql}`).get(...params) as { count: number };
       const total = countRow.count;
 
-      const rows = db.prepare(`
-        SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
-        FROM fatwas
-        ${whereSql}
-        ORDER BY published_date DESC, created_at DESC
-        LIMIT ? OFFSET ?
-      `).all(...params, limit, offset) as any[];
+      const isMultiSource = !sourceFilter || sourceFilter === 'all';
+      let rows: any[] = [];
+
+      if (isMultiSource) {
+        if (page === 1) {
+          // Dynamic varied questions on home page load across sources
+          const samplePerSource = Math.max(4, Math.ceil(limit / STANDARD_SOURCES.length));
+          const map = new Map<string, any[]>();
+          for (const s of STANDARD_SOURCES) {
+            const sWhereClauses = ['LOWER(source) = ?', ...whereClauses];
+            const sParams = [s, ...params];
+            const sWhereSql = `WHERE ${sWhereClauses.join(' AND ')}`;
+            const sRows = db.prepare(`
+              SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+              FROM fatwas
+              ${sWhereSql}
+              ORDER BY RANDOM()
+              LIMIT ?
+            `).all(...sParams, samplePerSource + 2) as any[];
+            map.set(s, sRows);
+          }
+          const interleaved = interleaveBySource(map, [...STANDARD_SOURCES]);
+          rows = interleaved.slice(0, limit);
+        } else {
+          // Deterministic pagination for page > 1
+          const skipPerSource = Math.floor(offset / STANDARD_SOURCES.length);
+          const limitPerSource = Math.ceil(limit / STANDARD_SOURCES.length) + 1;
+          const map = new Map<string, any[]>();
+          for (const s of STANDARD_SOURCES) {
+            const sWhereClauses = ['LOWER(source) = ?', ...whereClauses];
+            const sParams = [s, ...params];
+            const sWhereSql = `WHERE ${sWhereClauses.join(' AND ')}`;
+            const sRows = db.prepare(`
+              SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+              FROM fatwas
+              ${sWhereSql}
+              ORDER BY published_date DESC, created_at DESC
+              LIMIT ? OFFSET ?
+            `).all(...sParams, limitPerSource, skipPerSource) as any[];
+            map.set(s, sRows);
+          }
+          const interleaved = interleaveBySource(map, [...STANDARD_SOURCES]);
+          rows = interleaved.slice(0, limit);
+        }
+      } else {
+        rows = db.prepare(`
+          SELECT id, source, source_url, title, question, answer, category, tags, scholar, published_date, sha256_hash, scraped_at, created_at, updated_at
+          FROM fatwas
+          ${whereSql}
+          ORDER BY published_date DESC, created_at DESC
+          LIMIT ? OFFSET ?
+        `).all(...params, limit, offset) as any[];
+      }
 
       const results: SearchResultItem[] = rows.map((r) => ({
         ...r,
@@ -411,9 +463,10 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       whereClauses.push('LOWER(f.source) = ?');
       filterParams.push(sourceFilter);
     }
-    if (categoryFilter) {
-      whereClauses.push('LOWER(f.category) = ?');
-      filterParams.push(categoryFilter);
+    const catCond = getSqliteCategoryCondition(categoryFilter, 'f.');
+    if (catCond) {
+      whereClauses.push(catCond.sql);
+      filterParams.push(...catCond.params);
     }
     if (scholarFilter) {
       whereClauses.push('LOWER(f.scholar) LIKE ?');
@@ -754,10 +807,26 @@ export class LocalBengaliSearchEngine implements SearchEngine {
       });
     }
 
-    // Sort by final relevance score descending
-    scoredDocs.sort((a, b) => b.finalScore - a.finalScore);
+    const isMultiSource = !sourceFilter || sourceFilter === 'all';
+    let paginated: typeof scoredDocs = [];
 
-    const paginated = scoredDocs.slice(offset, offset + limit);
+    if (isMultiSource) {
+      // Group by source, sort each group descending by relevance score, then interleave round-robin
+      const grouped = new Map<string, typeof scoredDocs>();
+      for (const item of scoredDocs) {
+        const s = item.doc.source || 'other';
+        if (!grouped.has(s)) grouped.set(s, []);
+        grouped.get(s)!.push(item);
+      }
+      for (const [, list] of grouped) {
+        list.sort((a, b) => b.finalScore - a.finalScore);
+      }
+      const interleaved = interleaveBySource(grouped, [...STANDARD_SOURCES]);
+      paginated = interleaved.slice(offset, offset + limit);
+    } else {
+      scoredDocs.sort((a, b) => b.finalScore - a.finalScore);
+      paginated = scoredDocs.slice(offset, offset + limit);
+    }
 
     const topSynonyms = Array.from(expandedSynonyms).slice(0, 8);
     const allHighlightPool = Array.from(

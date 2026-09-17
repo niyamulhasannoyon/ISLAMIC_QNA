@@ -39,10 +39,15 @@ export async function GET(req: NextRequest) {
       limit,
     });
 
+    const isHomePageBrowse = !q && (!source || source === 'All') && (!category || category === 'All') && (page === 1);
+    const cacheControlHeader = isHomePageBrowse
+      ? 'no-store, max-age=0, must-revalidate'
+      : 'public, s-maxage=10, stale-while-revalidate=59';
+
     return NextResponse.json(result, {
       status: 200,
       headers: {
-        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=59',
+        'Cache-Control': cacheControlHeader,
       },
     });
   } catch (error: any) {

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-import { Search, X, Loader2, Command, CornerDownLeft, BookOpen, Sparkles } from "lucide-react";
-import { SearchResultItem, FiqhSemanticAnalysis } from "@/types/fatwa";
+import { Search, X, Loader2, Command, Sparkles } from "lucide-react";
+import { FiqhSemanticAnalysis } from "@/types/fatwa";
 import { useLanguage } from "@/context/LanguageContext";
 import { cn } from "@/lib/utils";
 
@@ -12,8 +12,6 @@ interface SearchHeroProps {
   isLoading: boolean;
   totalResults?: number;
   tookMs?: number;
-  previewResults?: SearchResultItem[];
-  onSelectPreviewItem?: (item: SearchResultItem) => void;
   semanticIntent?: FiqhSemanticAnalysis;
   isActive?: boolean;
 }
@@ -34,8 +32,6 @@ export function SearchHero({
   isLoading,
   totalResults,
   tookMs,
-  previewResults = [],
-  onSelectPreviewItem,
   semanticIntent,
   isActive,
 }: SearchHeroProps) {
@@ -87,9 +83,17 @@ export function SearchHero({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle arrow key navigation in preview dropdown
+  // Handle arrow key navigation in suggestions dropdown
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const itemsCount = previewResults.length > 0 ? previewResults.length : suggestions.length;
+    if (query.trim().length > 0) {
+      if (e.key === "Enter") {
+        setIsDropdownOpen(false);
+      }
+      return;
+    }
+
+    const itemsCount = suggestions.length;
+    if (itemsCount === 0) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -99,11 +103,9 @@ export function SearchHero({
       e.preventDefault();
       setIsDropdownOpen(true);
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : itemsCount - 1));
-    } else if (e.key === "Enter" && selectedIndex >= 0) {
-      e.preventDefault();
-      if (previewResults.length > 0 && onSelectPreviewItem) {
-        onSelectPreviewItem(previewResults[selectedIndex]);
-      } else if (suggestions[selectedIndex]) {
+    } else if (e.key === "Enter") {
+      if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+        e.preventDefault();
         onQueryChange(suggestions[selectedIndex].text);
       }
       setIsDropdownOpen(false);
@@ -225,84 +227,41 @@ export function SearchHero({
           </div>
         </div>
 
-        {/* Instant Dropdown Preview Panel */}
-        {isDropdownOpen && (
+        {/* Popular Suggestions Dropdown (Shown only when query is empty) */}
+        {isDropdownOpen && !query.trim() && suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in-50 zoom-in-98 duration-150">
-            {query.trim().length > 0 && previewResults.length > 0 ? (
-              <div className="p-2 space-y-1">
-                <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-400 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
-                  <span>{t.searchHero.previewHeading}</span>
-                  <span className="text-[10px]">↑↓ ↵</span>
-                </div>
-                {previewResults.slice(0, 4).map((item, idx) => (
+            <div className="p-3">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2 px-1">
+                {t.searchHero.popularInquiries}
+              </div>
+              <div className="space-y-1">
+                {suggestions.map((sug, idx) => (
                   <button
-                    key={item.id}
+                    key={idx}
                     type="button"
                     onClick={() => {
-                      if (onSelectPreviewItem) onSelectPreviewItem(item);
+                      onQueryChange(sug.text);
                       setIsDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-lg flex items-start gap-2.5 transition-colors ${
+                    className={cn(
+                      "w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs transition-colors",
+                      lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali" : "font-sans",
                       selectedIndex === idx
-                        ? "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100"
-                        : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-700 dark:text-zinc-300"
-                    }`}
+                        ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                        : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300"
+                    )}
                   >
-                    <BookOpen className="h-4 w-4 mt-0.5 text-zinc-400 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold font-bengali line-clamp-1">
-                        {item.title}
-                      </div>
-                      <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-2">
-                        <span>{item.source}</span>
-                        <span>&bull;</span>
-                        <span>{item.category}</span>
-                        {item.scholar && (
-                          <>
-                            <span>&bull;</span>
-                            <span className="text-emerald-600 dark:text-emerald-400 font-sans">{item.scholar}</span>
-                          </>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                      <span>{sug.text}</span>
                     </div>
-                    <CornerDownLeft className="h-3 w-3 text-zinc-400 mt-1 opacity-60 shrink-0" />
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400">
+                      {sug.category}
+                    </span>
                   </button>
                 ))}
               </div>
-            ) : (
-              <div className="p-3">
-                <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2 px-1">
-                  {t.searchHero.popularInquiries}
-                </div>
-                <div className="space-y-1">
-                  {suggestions.map((sug, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        onQueryChange(sug.text);
-                        setIsDropdownOpen(false);
-                      }}
-                      className={cn(
-                        "w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs transition-colors",
-                        lang === "ar" ? "font-arabic" : lang === "bn" ? "font-bengali" : "font-sans",
-                        selectedIndex === idx
-                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                        <span>{sug.text}</span>
-                      </div>
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400">
-                        {sug.category}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
 

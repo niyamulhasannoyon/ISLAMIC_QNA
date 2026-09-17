@@ -69,22 +69,22 @@ async function runBanglishTests() {
     { category: 'Purity & Women', query: 'haiz obosthay quran pora', expectedKeywords: ['হায়েয', 'কুরআন', 'তিলাওয়াত'] },
 
     // Prayer & Postures
-    { category: 'Salah', query: 'namajer somoy', expectedKeywords: ['সালাত', 'নামাজ', 'নামায', 'ওয়াক্ত'] },
-    { category: 'Salah', query: 'namaje montojog', expectedKeywords: ['সালাত', 'নামাজ', 'মনোযোগ', 'একাগ্রতা', 'খুশু'] },
-    { category: 'Salah', query: 'tahajjut namaj', expectedKeywords: ['তাহাজ্জুদ', 'সালাত', 'নামাজ'] },
+    { category: 'Salah', query: 'namajer somoy', expectedKeywords: ['সালাত', 'ছালাত', 'নামাজ', 'নামায', 'ওয়াক্ত'] },
+    { category: 'Salah', query: 'namaje montojog', expectedKeywords: ['সালাত', 'ছালাত', 'নামাজ', 'মনোযোগ', 'একাগ্রতা', 'খুশু'] },
+    { category: 'Salah', query: 'tahajjut namaj', expectedKeywords: ['তাহাজ্জুদ', 'সালাত', 'ছালাত', 'নামাজ'] },
     { category: 'Salah', query: 'sijdah sahu er niyom', expectedKeywords: ['সিজদা', 'সেজদা', 'সাহু'] },
     { category: 'Salah Posture', query: 'buke hath badha', expectedKeywords: ['হাত', 'বুকে', 'বাঁধা', 'রাখা'] },
     { category: 'Salah Posture', query: 'nabir niche hath', expectedKeywords: ['নাভি', 'নাভীর', 'নিচে', 'হাত'] },
-    { category: 'Salah Recitation', query: 'surah fatiha chara namaj hobe kina', expectedKeywords: ['সূরা ফাতিহা', 'ফাতিহা', 'সালাত'] },
-    { category: 'Special Prayer', query: 'janajar namaj porar niyom', expectedKeywords: ['জানাযা', 'জানাজা', 'সালাত'] },
-    { category: 'Travel Prayer', query: 'vromon kale qasr namaz', expectedKeywords: ['কসর', 'মুসাফির', 'সফর', 'সালাত'] },
-    { category: 'Travel Prayer', query: 'musafirer namaj', expectedKeywords: ['মুসাফির', 'কসর', 'সালাত'] },
+    { category: 'Salah Recitation', query: 'surah fatiha chara namaj hobe kina', expectedKeywords: ['সূরা ফাতিহা', 'ফাতিহা', 'সালাত', 'ছালাত'] },
+    { category: 'Special Prayer', query: 'janajar namaj porar niyom', expectedKeywords: ['জানাযা', 'জানাজা', 'সালাত', 'ছালাত'] },
+    { category: 'Travel Prayer', query: 'vromon kale qasr namaz', expectedKeywords: ['কসর', 'মুসাফির', 'সফর', 'সালাত', 'ছালাত'] },
+    { category: 'Travel Prayer', query: 'musafirer namaj', expectedKeywords: ['মুসাফির', 'কসর', 'সালাত', 'ছালাত'] },
 
     // Fasting & Medical
-    { category: 'Sawm', query: 'roja vangar karon', expectedKeywords: ['রোজা', 'রোযা', 'ভাঙ', 'ভঙ্গ', 'নষ্ট'] },
-    { category: 'Sawm Medical', query: 'roja obosthay injection', expectedKeywords: ['রোজা', 'রোযা', 'ইনজেকশন'] },
-    { category: 'Sawm Medical', query: 'inhaler nile ki roja vange', expectedKeywords: ['ইনহেলার', 'রোজা', 'রোযা'] },
-    { category: 'Sawm Habits', query: 'cigarette khele ki roja vange', expectedKeywords: ['রোজা', 'রোযা', 'সিগারেট', 'ধূমপান'] },
+    { category: 'Sawm', query: 'roja vangar karon', expectedKeywords: ['রোজা', 'রোযা', 'ছিয়াম', 'সিয়াম', 'ভাঙ', 'ভঙ্গ', 'নষ্ট'] },
+    { category: 'Sawm Medical', query: 'roja obosthay injection', expectedKeywords: ['রোজা', 'রোযা', 'ছিয়াম', 'সিয়াম', 'ইনজেকশন'] },
+    { category: 'Sawm Medical', query: 'inhaler nile ki roja vange', expectedKeywords: ['ইনহেলার', 'রোজা', 'রোযা', 'ছিয়াম', 'সিয়াম'] },
+    { category: 'Sawm Habits', query: 'cigarette khele ki roja vange', expectedKeywords: ['রোজা', 'রোযা', 'ছিয়াম', 'সিয়াম', 'সিগারেট', 'ধূমপান'] },
 
     // Sacrifice & Charity
     { category: 'Aqeeqah', query: 'chagol diye akika', expectedKeywords: ['আকীকা', 'আক্বীক্বা', 'ছাগল', 'পশু'] },
@@ -98,8 +98,8 @@ async function runBanglishTests() {
     // Modesty & Family Law
     { category: 'Modesty', query: 'dari kata ki gunah', expectedKeywords: ['দাড়ি', 'দাড়ি', 'দাঁড়ি'] },
     { category: 'Modesty', query: 'meye der porda', expectedKeywords: ['পর্দা', 'হিজাব', 'বোরকা', 'নারী'] },
-    { category: 'Family', query: 'porokiya kora jay kina', expectedKeywords: ['পরকীয়া', 'যিনা', 'ব্যাভিচার'] },
-    { category: 'Family', query: 'chele meye prem kora', expectedKeywords: ['সম্পর্ক', 'বিবাহ', 'যিনা', 'পাপ'] },
+    { category: 'Family', query: 'porokiya kora jay kina', expectedKeywords: ['পরকীয়া', 'যিনা', 'জিনা', 'ব্যাভিচার', 'ব্যভিচার'] },
+    { category: 'Family', query: 'chele meye prem kora', expectedKeywords: ['সম্পর্ক', 'বিবাহ', 'যিনা', 'জিনা', 'পাপ', 'প্রেম'] },
     { category: 'Family', query: 'talaq er niyom', expectedKeywords: ['তালাক', 'ইদ্দত'] },
 
     // Belief & Satan

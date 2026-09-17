@@ -462,9 +462,39 @@ export async function getFacetsMongo(): Promise<SearchFacets> {
       .toArray(),
   ]);
 
+  const { CANONICAL_CATEGORIES } = await import('../search/categoryUtils');
+  const catMap = new Map<string, number>();
+  for (const c of categories as { name: string; count: number }[]) {
+    catMap.set(c.name, c.count);
+  }
+
+  const consolidatedCategories: { name: string; count: number }[] = [];
+  const handledRaw = new Set<string>();
+
+  for (const canon of CANONICAL_CATEGORIES) {
+    let sum = 0;
+    for (const dbName of canon.dbCategories) {
+      if (catMap.has(dbName)) {
+        sum += catMap.get(dbName)!;
+        handledRaw.add(dbName);
+      }
+    }
+    if (sum > 0) {
+      consolidatedCategories.push({ name: canon.name, count: sum });
+    }
+  }
+
+  for (const c of categories as { name: string; count: number }[]) {
+    if (!handledRaw.has(c.name)) {
+      consolidatedCategories.push(c);
+    }
+  }
+
+  consolidatedCategories.sort((a, b) => b.count - a.count);
+
   return {
     sources: sources as { name: string; count: number }[],
-    categories: categories as { name: string; count: number }[],
+    categories: consolidatedCategories,
     scholars: scholars as { name: string; count: number }[],
   };
 }

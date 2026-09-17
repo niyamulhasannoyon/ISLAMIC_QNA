@@ -1,0 +1,19 @@
+{
+  "_comment": "MongoDB Atlas Search Vector Index JSON Definition for 'vector_index' on collection 'fatwas'",
+  "fields": [
+    {
+      "type": "vector",
+      "path": "embedding",
+      "numDimensions": 1536,
+      "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "source"
+    },
+    {
+      "type": "filter",
+      "path": "category"
+    }
+  ]
+}

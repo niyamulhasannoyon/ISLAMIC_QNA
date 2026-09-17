@@ -42,27 +42,48 @@ export function isEmbeddingConfigured(): boolean {
 }
 
 /**
- * Combines title, question, and answer into an optimal semantic representation
+ * Combines title and content (or question + answer) into an optimal semantic representation
  * for Islamic jurisprudence Q&A embeddings.
+ * Formats: title + " " + content (per requirement).
+ */
+export function formatDocumentForEmbedding(item: {
+  title?: string;
+  content?: string;
+  question?: string;
+  answer?: string;
+  category?: string;
+  scholar?: string;
+}): string {
+  const title = (item.title || '').trim();
+  const rawContent = (item.content || '').trim();
+  const question = (item.question || '').trim();
+  const answer = (item.answer || '').trim();
+
+  // If explicit content is provided, format: title + " " + content
+  if (rawContent) {
+    return `${title} ${rawContent}`.trim();
+  }
+
+  // Otherwise synthesize content from question and answer (truncated to ~1500 chars)
+  const synthesizedContent = question === title || !question
+    ? answer.slice(0, 1500)
+    : `${question}\n${answer.slice(0, 1500)}`.trim();
+
+  return `${title} ${synthesizedContent}`.trim();
+}
+
+/**
+ * Legacy compatible formatter for Islamic jurisprudence Q&A embeddings.
  */
 export function formatFatwaForEmbedding(item: {
   title: string;
   question: string;
   answer: string;
+  content?: string;
   category?: string;
   scholar?: string;
 }): string {
-  const title = (item.title || '').trim();
-  const question = (item.question || '').trim();
-  // Truncate answer to ~1200 characters to stay within fast token boundaries
-  const answer = (item.answer || '').trim().slice(0, 1200);
-
-  const parts = [];
-  if (title) parts.push(`শিরোনাম: ${title}`);
-  if (question && question !== title) parts.push(`প্রশ্ন: ${question}`);
-  if (answer) parts.push(`উত্তর: ${answer}`);
-
-  return parts.join('\n');
+  return formatDocumentForEmbedding(item);
 }
 
 /**
@@ -102,6 +123,11 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
 
   return null;
 }
+
+/**
+ * Alias for getEmbedding specifically for query vectors.
+ */
+export const getQueryEmbedding = getEmbedding;
 
 /**
  * Generates vector embeddings for a batch of texts.

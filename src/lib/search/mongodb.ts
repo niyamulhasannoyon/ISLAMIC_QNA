@@ -8,6 +8,13 @@ import { generateHighlightedSnippet } from './local';
 import { escapeRegExp } from '../utils';
 import { getDeterministicFiqhFallback } from '../ai/semantic';
 import { getEmbedding, isEmbeddingConfigured } from '../ai/embedding';
+import { normalizeSearchQuery } from '../ai/normalizeQuery';
+import {
+  getMongoCategoryFilter,
+  resolveDbCategories,
+  interleaveBySource,
+  STANDARD_SOURCES,
+} from './categoryUtils';
 
 export class MongoAtlasSearchEngine implements SearchEngine {
   public name = 'MongoDB Atlas Vector Search ($vectorSearch)';
@@ -130,12 +137,22 @@ export class MongoAtlasSearchEngine implements SearchEngine {
     }
 
     if (options.category && options.category !== 'All') {
-      filterClauses.push({
-        phrase: {
-          query: options.category,
-          path: 'category',
-        },
-      });
+      const resolved = resolveDbCategories(options.category);
+      if (resolved.length === 1) {
+        filterClauses.push({
+          phrase: {
+            query: resolved[0],
+            path: 'category',
+          },
+        });
+      } else if (resolved.length > 1) {
+        filterClauses.push({
+          compound: {
+            should: resolved.map((r) => ({ phrase: { query: r, path: 'category' } })),
+            minimumShouldMatch: 1,
+          },
+        });
+      }
     }
 
     if (options.scholar && options.scholar !== 'All') {
@@ -227,19 +244,69 @@ export class MongoAtlasSearchEngine implements SearchEngine {
     if (!rawQuery) {
       const filter: any = {};
       if (sourceFilter) filter.source = sourceFilter;
-      if (categoryFilter) filter.category = categoryFilter;
+      const mongoCat = getMongoCategoryFilter(categoryFilter);
+      if (mongoCat) Object.assign(filter, mongoCat);
       if (scholarFilter) filter.scholar = { $regex: escapeRegExp(scholarFilter), $options: 'i' };
 
-      const [total, docs, facets] = await Promise.all([
-        collection.countDocuments(filter),
-        collection
-          .find(filter, { projection: { embedding: 0 } })
-          .sort({ published_date: -1, created_at: -1 })
-          .skip(skip)
-          .limit(limit)
-          .toArray(),
-        getFacetsMongo(),
-      ]);
+      const isMultiSource = !sourceFilter || sourceFilter === 'all';
+      let docs: any[] = [];
+      let total = 0;
+
+      if (isMultiSource) {
+        total = await collection.countDocuments(filter);
+
+        if (page === 1) {
+          // Dynamic varied questions on home page load / refresh across sources
+          const samplePerSource = Math.max(4, Math.ceil(limit / STANDARD_SOURCES.length));
+          const sourceResults = await Promise.all(
+            STANDARD_SOURCES.map((s) =>
+              collection
+                .aggregate([
+                  { $match: { ...filter, source: s } },
+                  { $sample: { size: samplePerSource + 2 } },
+                  { $project: { embedding: 0 } },
+                ])
+                .toArray()
+            )
+          );
+          const map = new Map<string, any[]>();
+          STANDARD_SOURCES.forEach((s, i) => map.set(s, sourceResults[i] || []));
+          const interleaved = interleaveBySource(map, [...STANDARD_SOURCES]);
+          docs = interleaved.slice(0, limit);
+        } else {
+          // Deterministic pagination for page > 1
+          const skipPerSource = Math.floor(skip / STANDARD_SOURCES.length);
+          const limitPerSource = Math.ceil(limit / STANDARD_SOURCES.length) + 1;
+          const sourceResults = await Promise.all(
+            STANDARD_SOURCES.map((s) =>
+              collection
+                .find({ ...filter, source: s }, { projection: { embedding: 0 } })
+                .sort({ published_date: -1, created_at: -1 })
+                .skip(skipPerSource)
+                .limit(limitPerSource)
+                .toArray()
+            )
+          );
+          const map = new Map<string, any[]>();
+          STANDARD_SOURCES.forEach((s, i) => map.set(s, sourceResults[i] || []));
+          const interleaved = interleaveBySource(map, [...STANDARD_SOURCES]);
+          docs = interleaved.slice(0, limit);
+        }
+      } else {
+        const [cnt, singleDocs] = await Promise.all([
+          collection.countDocuments(filter),
+          collection
+            .find(filter, { projection: { embedding: 0 } })
+            .sort({ published_date: -1, created_at: -1 })
+            .skip(skip)
+            .limit(limit)
+            .toArray(),
+        ]);
+        total = cnt;
+        docs = singleDocs;
+      }
+
+      const facets = await getFacetsMongo();
 
       const results: SearchResultItem[] = docs.map((doc: any) => ({
         id: doc.id || String(doc._id),
@@ -274,11 +341,17 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       };
     }
 
-    // 2. Offline Fiqh intent check (0ms instantaneous in-memory regex)
-    const deterministicIntent = getDeterministicFiqhFallback(rawQuery);
+    // 2. Query Normalization & Fiqh Intent Extraction
+    // First, run ultra-fast LLM normalization (Groq Mixtral-8x7b / fallback) to translate
+    // Banglish / casual query into clean formal Bengali semantic search phrase
+    const [normResult, deterministicIntent] = await Promise.all([
+      normalizeSearchQuery(rawQuery),
+      Promise.resolve(getDeterministicFiqhFallback(rawQuery)),
+    ]);
 
     const transliterated = transliterateQuery(rawQuery);
     const primaryQuery = transliterated.primaryBengali || rawQuery;
+    const normalizedSemanticQuery = normResult.normalizedQuery || primaryQuery;
     const normalizedQuery = normalizeBengaliText(primaryQuery);
 
     const rawTokens = normalizedQuery.split(/[\s,.;:!?"'()\-–—\/\\]+/).filter(Boolean);
@@ -287,6 +360,12 @@ export class MongoAtlasSearchEngine implements SearchEngine {
 
     const expandedSynonyms = new Set<string>();
     const highlightTerms = new Set<string>();
+
+    // Add normalized semantic query tokens to highlight pool
+    const semanticTokens = normalizeBengaliText(normalizedSemanticQuery)
+      .split(/[\s,.;:!?"'()\-–—\/\\]+/)
+      .filter((t) => t && !isStopWord(t) && t.length >= 2);
+    semanticTokens.forEach((st) => highlightTerms.add(st));
 
     if (deterministicIntent?.technical_fiqh_terms) {
       deterministicIntent.technical_fiqh_terms.forEach((ft) => {
@@ -324,13 +403,16 @@ export class MongoAtlasSearchEngine implements SearchEngine {
     let engineUsed = '';
 
     // =========================================================================
-    // STEP A: Super-Fast MongoDB Atlas Vector Search ($vectorSearch: 15-50ms)
+    // STEP A: Ultra-Fast MongoDB Atlas Vector Search ($vectorSearch)
     // =========================================================================
     if (isEmbeddingConfigured()) {
       try {
-        const queryVector = await getEmbedding(rawQuery);
+        // Embed the normalized formal Bengali semantic phrase for maximum vector similarity
+        const queryVector = await getEmbedding(normalizedSemanticQuery);
         if (queryVector && Array.isArray(queryVector)) {
           const vectorIndexName = process.env.VECTOR_INDEX_NAME || 'vector_index';
+          const candidatesCount = 100;
+          const vectorLimit = Math.max(10, limit);
 
           const vectorPipeline: any[] = [
             {
@@ -338,8 +420,8 @@ export class MongoAtlasSearchEngine implements SearchEngine {
                 index: vectorIndexName,
                 path: 'embedding',
                 queryVector: queryVector,
-                numCandidates: Math.max(100, limit * 10),
-                limit: Math.max(25, limit * 2),
+                numCandidates: candidatesCount,
+                limit: vectorLimit,
               },
             },
           ];
@@ -347,7 +429,8 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           // Apply post-search filters if user selected specific criteria
           const filterStage: any = {};
           if (sourceFilter) filterStage.source = sourceFilter;
-          if (categoryFilter) filterStage.category = categoryFilter;
+          const vectorCat = getMongoCategoryFilter(categoryFilter);
+          if (vectorCat) Object.assign(filterStage, vectorCat);
           if (scholarFilter) filterStage.scholar = { $regex: escapeRegExp(scholarFilter), $options: 'i' };
 
           if (Object.keys(filterStage).length > 0) {
@@ -355,6 +438,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           }
 
           // Important optimization: Explicitly exclude 1536-dim embedding array from results
+          // to drastically minimize wire latency and network payload size
           vectorPipeline.push(
             {
               $project: {
@@ -370,6 +454,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
                 title: 1,
                 question: 1,
                 answer: 1,
+                content: 1,
                 category: 1,
                 tags: 1,
                 scholar: 1,
@@ -441,14 +526,38 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       const filter: any = {};
       if (orConditions.length > 0) filter.$or = orConditions;
       if (sourceFilter) filter.source = sourceFilter;
-      if (categoryFilter) filter.category = categoryFilter;
+      const mongoCat = getMongoCategoryFilter(categoryFilter);
+      if (mongoCat) Object.assign(filter, mongoCat);
       if (scholarFilter) filter.scholar = { $regex: escapeRegExp(scholarFilter), $options: 'i' };
 
-      const candidateDocs = await collection
-        .find(filter, { projection: { embedding: 0 } })
-        .limit(150)
-        .toArray();
-      total = candidateDocs.length;
+      const isMultiSource = !sourceFilter || sourceFilter === 'all';
+      let candidateDocs: any[] = [];
+
+      if (isMultiSource) {
+        // Balanced candidate retrieval across all archives concurrently
+        const perSourceLimit = Math.max(35, Math.ceil(150 / STANDARD_SOURCES.length));
+        const [cnt, ...sourceCandidates] = await Promise.all([
+          collection.countDocuments(filter),
+          ...STANDARD_SOURCES.map((s) =>
+            collection
+              .find({ ...filter, source: s }, { projection: { embedding: 0 } })
+              .limit(perSourceLimit)
+              .toArray()
+          ),
+        ]);
+        total = cnt;
+        candidateDocs = sourceCandidates.flat();
+      } else {
+        const [cnt, singleCandidates] = await Promise.all([
+          collection.countDocuments(filter),
+          collection
+            .find(filter, { projection: { embedding: 0 } })
+            .limit(150)
+            .toArray(),
+        ]);
+        total = cnt;
+        candidateDocs = singleCandidates;
+      }
 
       const scoredDocs = candidateDocs.map((doc: any) => {
         let score = 50.0;
@@ -495,12 +604,32 @@ export class MongoAtlasSearchEngine implements SearchEngine {
         };
       });
 
-      scoredDocs.sort((a, b) => b.score - a.score);
-      docs = scoredDocs.slice(skip, skip + limit).map((s) => ({
-        ...s.doc,
-        _score: s.score,
-        _matched: s.matchedTerms,
-      }));
+      if (isMultiSource) {
+        // Group by source, sort each group descending by relevance score, then interleave round-robin
+        const grouped = new Map<string, typeof scoredDocs>();
+        for (const item of scoredDocs) {
+          const s = item.doc.source || 'other';
+          if (!grouped.has(s)) grouped.set(s, []);
+          grouped.get(s)!.push(item);
+        }
+        for (const [, list] of grouped) {
+          list.sort((a, b) => b.score - a.score);
+        }
+        const interleaved = interleaveBySource(grouped, [...STANDARD_SOURCES]);
+        docs = interleaved.slice(skip, skip + limit).map((s) => ({
+          ...s.doc,
+          _score: s.score,
+          _matched: s.matchedTerms,
+        }));
+      } else {
+        scoredDocs.sort((a, b) => b.score - a.score);
+        docs = scoredDocs.slice(skip, skip + limit).map((s) => ({
+          ...s.doc,
+          _score: s.score,
+          _matched: s.matchedTerms,
+        }));
+      }
+
       engineUsed = 'MongoDB Atlas (Resilient Text)';
     }
 
@@ -546,7 +675,14 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       tookMs: Date.now() - startTime,
       engine: engineUsed,
       facets,
-      semanticIntent: deterministicIntent || undefined,
+      semanticIntent: deterministicIntent || {
+        fiqh_intent: normalizedSemanticQuery,
+        fiqh_category: 'General Fiqh',
+        technical_fiqh_terms: [],
+        expanded_keywords: [],
+        optimized_search_query: normalizedSemanticQuery,
+        canonicalBengali: normalizedSemanticQuery,
+      },
     };
   }
 }

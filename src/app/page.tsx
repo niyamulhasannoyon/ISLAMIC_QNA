@@ -9,10 +9,9 @@ import { FatwaCard } from "@/components/FatwaCard";
 import { FatwaModal } from "@/components/FatwaModal";
 import { SkeletonLoader } from "@/components/SkeletonLoader";
 import { EmptyState } from "@/components/EmptyState";
-import { AISummaryBox } from "@/components/AISummaryBox";
 import { useLanguage } from "@/context/LanguageContext";
 import { SearchResponse, SearchResultItem, FacetCount, FiqhSemanticAnalysis } from "@/types/fatwa";
-import { ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShieldCheck, RotateCw } from "lucide-react";
 import {
   buildCacheKey,
   getCachedSearch,
@@ -277,6 +276,25 @@ export default function Home() {
     setPage(1);
   };
 
+  const handleRefreshBrowse = () => {
+    setIsLoading(true);
+    fetch(`/api/v1/search?page=1&limit=10&_t=${Date.now()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setResults(data.results || []);
+        setTotalResults(data.total);
+        setTotalPages(data.totalPages || 1);
+        setTookMs(data.tookMs);
+        if (data.facets) {
+          setSourceFacets(data.facets.sources || []);
+          setCategoryFacets(data.facets.categories || []);
+          setScholarFacets(data.facets.scholars || []);
+        }
+      })
+      .catch((err) => console.error(err))
+      .finally(() => setIsLoading(false));
+  };
+
   const isSearchActive = Boolean(
     query.trim() ||
     debouncedQuery.trim() ||
@@ -297,8 +315,6 @@ export default function Home() {
           isLoading={isLoading}
           totalResults={totalResults}
           tookMs={tookMs}
-          previewResults={results}
-          onSelectPreviewItem={(item) => setActiveModalItem(item)}
           semanticIntent={semanticIntent}
           isActive={isSearchActive}
         />
@@ -323,9 +339,17 @@ export default function Home() {
         <div className="w-full max-w-3xl mx-auto space-y-3 sm:space-y-4">
           {/* Subtle label when browsing without search query */}
           {!isSearchActive && results.length > 0 && !isLoading && (
-            <div className="pt-2 pb-1 flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500 font-mono border-b border-zinc-200/60 dark:border-zinc-800/60 mb-1">
-              <span className="font-bengali font-medium">সর্বশেষ সংযোজিত ফতোয়াসমূহ</span>
-              <span className="text-[11px] font-mono">লাইভ সংগ্রহশালা</span>
+            <div className="pt-2 pb-1.5 flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500 font-mono border-b border-zinc-200/60 dark:border-zinc-800/60 mb-1">
+              <span className="font-bengali font-medium">নির্বাচিত ফতোয়াসমূহ (পর্যায়ক্রমে সংকলিত)</span>
+              <button
+                type="button"
+                onClick={handleRefreshBrowse}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bengali text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-500/20 hover:border-emerald-500/40 transition-colors cursor-pointer"
+                title="নতুন বিভিন্ন প্রশ্ন দেখুন"
+              >
+                <RotateCw className="h-3 w-3" />
+                <span>নতুন প্রশ্ন দেখুন</span>
+              </button>
             </div>
           )}
 
@@ -333,15 +357,6 @@ export default function Home() {
             <SkeletonLoader />
           ) : results.length > 0 ? (
             <div className="space-y-2.5 sm:space-y-3.5">
-              {/* On-Demand AI Summary with Mixtral */}
-              {debouncedQuery.trim().length >= 2 && (
-                <AISummaryBox
-                  query={debouncedQuery}
-                  results={results}
-                  onOpenModal={setActiveModalItem}
-                />
-              )}
-
               {results.map((item) => (
                 <FatwaCard
                   key={item.id}

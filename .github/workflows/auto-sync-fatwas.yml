@@ -1,10 +1,10 @@
-name: Automatic Fatwa Live Sync
+name: Automatic Fatwa Monthly Live Sync
 
 on:
   schedule:
-    # Runs everyday at midnight UTC (06:00 AM BD time)
-    - cron: '0 0 * * *'
-  workflow_dispatch: # Allows manual one-click trigger from GitHub Actions UI
+    # Runs on the 1st and 5th of every month at 00:00 UTC (06:00 AM Bangladesh Time)
+    - cron: '0 0 1,5 * *'
+  workflow_dispatch: # Allows manual one-click trigger from GitHub Actions UI anytime
 
 jobs:
   sync-fatwas:
@@ -27,8 +27,11 @@ jobs:
           pip install -r scraper/requirements.txt
 
       - name: Run Live Incremental Crawler
+        env:
+          API_URL: ${{ secrets.API_URL || secrets.NEXT_PUBLIC_APP_URL || '' }}
+          INGESTION_SECRET_TOKEN: ${{ secrets.INGESTION_SECRET_TOKEN || '' }}
         run: |
-          python3 scraper/incremental_scraper.py --max-items 100
+          python3 scraper/incremental_scraper.py --source all --max-items 150
 
       - name: Commit and Push Updated Database
         run: |
@@ -36,8 +39,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add data/fatwas.db scraper/scraper_state.json
           if git diff --staged --quiet; then
-            echo "No new fatwas discovered today. Database is up to date."
+            echo "No new monthly fatwas discovered. Database is up to date."
           else
-            git commit -m "Auto-sync: Ingest new fatwas from Al-I'tisam & At-Tahreek [skip ci]"
+            git commit -m "Auto-sync: Ingest monthly fatwas from Al-I'tisam, At-Tahreek & Al-Kawsar"
             git push origin main
           fi

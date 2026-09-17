@@ -43,6 +43,8 @@ export function buildCacheKey(params: {
  */
 export function getCachedSearch(cacheKey: string): SearchResponse | null {
   if (typeof window === "undefined") return null;
+  // Never serve stale home page questions from cache so each refresh shows fresh questions
+  if (!cacheKey) return null;
 
   // 1. Check in-memory cache
   const mem = memoryCache.get(cacheKey);
@@ -75,6 +77,8 @@ export function getCachedSearch(cacheKey: string): SearchResponse | null {
  */
 export function setCachedSearch(cacheKey: string, data: SearchResponse): void {
   if (typeof window === "undefined") return;
+  // Don't persist default home page in sessionStorage so fresh questions appear on reload
+  if (!cacheKey) return;
 
   const entry: CacheEntry = {
     data,
