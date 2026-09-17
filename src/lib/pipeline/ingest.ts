@@ -2,6 +2,7 @@ import { getMongoDb } from '../db/mongodb';
 import { batchUpsertFatwas } from '../db';
 import { IngestItemInput, IngestResultItem } from '@/types/fatwa';
 import { computeFatwaHash, hashToUuid } from '../hash';
+import { getBatchEmbeddings, formatFatwaForEmbedding, isEmbeddingConfigured } from '../ai/embedding';
 
 export interface SyncBatchResponse {
   inserted: number;
@@ -28,36 +29,68 @@ export async function syncFatwaBatch(items: IngestItemInput[]): Promise<SyncBatc
     await collection.createIndex({ source_url: 1 });
     await collection.createIndex({ source: 1, published_date: -1 });
 
-    const bulkOps = items.map((item) => {
+    let embeddings: Array<number[] | null> = [];
+    if (isEmbeddingConfigured()) {
+      try {
+        const formatted = items.map((it) =>
+          formatFatwaForEmbedding({
+            title: it.title,
+            question: it.question,
+            answer: it.answer,
+            category: it.category,
+            scholar: it.scholar,
+          })
+        );
+        embeddings = await getBatchEmbeddings(formatted);
+      } catch (embErr) {
+        console.warn('[Ingest Embedding Warning]: Could not generate embeddings for batch:', embErr);
+      }
+    }
+
+    const bulkOps = items.map((item, idx) => {
       const question = item.question.trim();
       const answer = item.answer.trim();
       const sha256_hash = (item.sha256_hash || computeFatwaHash({ question, answer })).toLowerCase();
       const id = item.id || hashToUuid(sha256_hash);
       const now = new Date().toISOString();
+      const vector = embeddings[idx];
+
+      const setFields: any = {
+        source: item.source,
+        source_url: item.source_url,
+        title: item.title,
+        question: item.question,
+        answer: item.answer,
+        category: item.category || 'General',
+        tags: item.tags || [],
+        scholar: item.scholar || '',
+        published_date: item.published_date || now,
+        scraped_at: item.scraped_at || now,
+        updated_at: now,
+      };
+
+      if (vector && Array.isArray(vector)) {
+        setFields.embedding = vector;
+        setFields.embedded_at = now;
+      }
+
+      const setOnInsertFields: any = {
+        _id: id,
+        id: id,
+        sha256_hash: sha256_hash,
+        created_at: item.published_date || now,
+      };
+
+      if (vector && Array.isArray(vector)) {
+        setOnInsertFields.embedding = vector;
+      }
 
       return {
         updateOne: {
           filter: { sha256_hash },
           update: {
-            $set: {
-              source: item.source,
-              source_url: item.source_url,
-              title: item.title,
-              question: item.question,
-              answer: item.answer,
-              category: item.category || 'General',
-              tags: item.tags || [],
-              scholar: item.scholar || '',
-              published_date: item.published_date || now,
-              scraped_at: item.scraped_at || now,
-              updated_at: now,
-            },
-            $setOnInsert: {
-              _id: id,
-              id: id,
-              sha256_hash: sha256_hash,
-              created_at: item.published_date || now,
-            },
+            $set: setFields,
+            $setOnInsert: setOnInsertFields,
           },
           upsert: true,
         },

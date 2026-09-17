@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RAGQuerySchema } from '@/lib/db/schema';
 import { generateRAGAnswer } from '@/lib/ai/rag';
-
 import { safeErrorResponse } from '@/lib/apiErrors';
 
 export const dynamic = 'force-dynamic';
@@ -13,13 +12,16 @@ export async function POST(req: NextRequest) {
 
     if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Invalid query', details: parseResult.error.flatten() },
+        { error: 'অবৈধ প্রশ্ন বা প্যারামিটার', details: parseResult.error.flatten() },
         { status: 400 }
       );
     }
 
-    const { question } = parseResult.data;
-    const ragResult = await generateRAGAnswer(question);
+    const { question, fatwaIds, contextLimit } = parseResult.data;
+    const ragResult = await generateRAGAnswer(question, {
+      fatwaIds,
+      limit: contextLimit || 2,
+    });
 
     return NextResponse.json(ragResult);
   } catch (err: any) {

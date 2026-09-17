@@ -31,9 +31,10 @@ export const SearchQuerySchema = z.object({
 export const RAGQuerySchema = z.object({
   question: z
     .string()
-    .min(3, 'Question must be at least 3 characters')
+    .min(2, 'Question must be at least 2 characters')
     .max(1000, 'Question cannot exceed 1000 characters'),
   contextLimit: z.coerce.number().int().positive().max(10).optional().default(5),
+  fatwaIds: z.array(z.string()).optional(),
 });
 
 export type FatwaIngestionItem = z.infer<typeof FatwaIngestionItemSchema>;

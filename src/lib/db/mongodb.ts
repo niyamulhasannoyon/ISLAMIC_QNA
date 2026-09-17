@@ -3,6 +3,7 @@ import { User } from '@/types/user';
 import { FatwaQA, IngestItemInput, IngestResultItem, SearchFacets, FatwaSource } from '@/types/fatwa';
 import { computeFatwaHash, hashToUuid, normalizeText } from '../hash';
 import { extractIdFromSlug } from '@/lib/utils';
+import { getEmbedding, formatFatwaForEmbedding, isEmbeddingConfigured } from '../ai/embedding';
 
 const uri = process.env.MONGODB_URI;
 
@@ -301,7 +302,21 @@ export async function upsertFatwaMongo(item: IngestItemInput): Promise<IngestRes
     return { id: existing.id || String(existing._id), sha256_hash, status: 'skipped' };
   }
 
-  await collection.insertOne({
+  let embedding: number[] | null = null;
+  if (isEmbeddingConfigured()) {
+    try {
+      const formatted = formatFatwaForEmbedding({
+        title: item.title,
+        question,
+        answer,
+        category: item.category,
+        scholar: item.scholar,
+      });
+      embedding = await getEmbedding(formatted);
+    } catch {}
+  }
+
+  const newDoc: any = {
     _id: id as any,
     id,
     source: item.source,
@@ -317,7 +332,14 @@ export async function upsertFatwaMongo(item: IngestItemInput): Promise<IngestRes
     scraped_at: item.scraped_at || now,
     created_at: item.published_date || now,
     updated_at: now,
-  });
+  };
+
+  if (embedding && Array.isArray(embedding)) {
+    newDoc.embedding = embedding;
+    newDoc.embedded_at = now;
+  }
+
+  await collection.insertOne(newDoc);
 
   return { id, sha256_hash, status: 'inserted' };
 }

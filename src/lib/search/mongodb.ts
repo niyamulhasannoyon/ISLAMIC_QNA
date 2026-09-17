@@ -6,10 +6,11 @@ import { normalizeBengaliText, stemBengaliToken, isStopWord } from './normalizer
 import { getMongoDb, isMongoConfigured, getFacetsMongo } from '../db/mongodb';
 import { generateHighlightedSnippet } from './local';
 import { escapeRegExp } from '../utils';
-import { extractSemanticFiqhIntent } from '../ai/semantic';
+import { getDeterministicFiqhFallback } from '../ai/semantic';
+import { getEmbedding, isEmbeddingConfigured } from '../ai/embedding';
 
 export class MongoAtlasSearchEngine implements SearchEngine {
-  public name = 'MongoDB Atlas Search (Bengali Analyzer)';
+  public name = 'MongoDB Atlas Vector Search ($vectorSearch)';
   private uri: string;
 
   constructor() {
@@ -67,7 +68,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
   }
 
   /**
-   * Generates MongoDB Atlas Search aggregation pipeline for Bengali full-text search
+   * Generates MongoDB Atlas Search aggregation pipeline for Bengali full-text search fallback
    */
   public buildAtlasSearchPipeline(options: SearchQueryOptions, aiIntent?: FiqhSemanticAnalysis | null): any[] {
     const rawQuery = (options.q || '').trim();
@@ -117,17 +118,6 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           score: { boost: { value: 2.0 } },
         },
       });
-
-      // Boost specific classical Islamic jurisprudence concepts
-      if (aiIntent?.technical_fiqh_terms && aiIntent.technical_fiqh_terms.length > 0) {
-        shouldClauses.push({
-          text: {
-            query: aiIntent.technical_fiqh_terms.join(' '),
-            path: ['title', 'question'],
-            score: { boost: { value: 6.0 } },
-          },
-        });
-      }
     }
 
     if (options.source && options.source !== 'All') {
@@ -177,6 +167,11 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           highlight: {
             path: ['title', 'question', 'answer'],
           },
+        },
+      },
+      {
+        $project: {
+          embedding: 0,
         },
       },
       {
@@ -238,7 +233,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       const [total, docs, facets] = await Promise.all([
         collection.countDocuments(filter),
         collection
-          .find(filter)
+          .find(filter, { projection: { embedding: 0 } })
           .sort({ published_date: -1, created_at: -1 })
           .skip(skip)
           .limit(limit)
@@ -274,13 +269,13 @@ export class MongoAtlasSearchEngine implements SearchEngine {
         limit,
         totalPages: Math.ceil(total / limit) || 1,
         tookMs: Date.now() - startTime,
-        engine: this.name,
+        engine: 'MongoDB Atlas',
         facets,
       };
     }
 
-    // 2. Search query processing & expansion
-    const aiIntent = await extractSemanticFiqhIntent(rawQuery);
+    // 2. Offline Fiqh intent check (0ms instantaneous in-memory regex)
+    const deterministicIntent = getDeterministicFiqhFallback(rawQuery);
 
     const transliterated = transliterateQuery(rawQuery);
     const primaryQuery = transliterated.primaryBengali || rawQuery;
@@ -293,16 +288,10 @@ export class MongoAtlasSearchEngine implements SearchEngine {
     const expandedSynonyms = new Set<string>();
     const highlightTerms = new Set<string>();
 
-    if (aiIntent?.technical_fiqh_terms) {
-      aiIntent.technical_fiqh_terms.forEach((ft) => {
+    if (deterministicIntent?.technical_fiqh_terms) {
+      deterministicIntent.technical_fiqh_terms.forEach((ft) => {
         expandedSynonyms.add(ft);
         highlightTerms.add(ft);
-      });
-    }
-    if (aiIntent?.expanded_keywords) {
-      aiIntent.expanded_keywords.forEach((ek) => {
-        expandedSynonyms.add(ek);
-        highlightTerms.add(ek);
       });
     }
 
@@ -332,23 +321,103 @@ export class MongoAtlasSearchEngine implements SearchEngine {
 
     let docs: any[] = [];
     let total = 0;
-    let usedAtlasSearch = false;
+    let engineUsed = '';
 
-    // Try Atlas Search aggregation pipeline
-    try {
-      const pipeline = this.buildAtlasSearchPipeline(options, aiIntent);
-      const aggResults = await collection.aggregate(pipeline).toArray();
-      if (aggResults && aggResults.length > 0) {
-        docs = aggResults;
-        total = aggResults.length >= limit ? limit * page + 1 : (page - 1) * limit + aggResults.length;
-        usedAtlasSearch = true;
+    // =========================================================================
+    // STEP A: Super-Fast MongoDB Atlas Vector Search ($vectorSearch: 15-50ms)
+    // =========================================================================
+    if (isEmbeddingConfigured()) {
+      try {
+        const queryVector = await getEmbedding(rawQuery);
+        if (queryVector && Array.isArray(queryVector)) {
+          const vectorIndexName = process.env.VECTOR_INDEX_NAME || 'vector_index';
+
+          const vectorPipeline: any[] = [
+            {
+              $vectorSearch: {
+                index: vectorIndexName,
+                path: 'embedding',
+                queryVector: queryVector,
+                numCandidates: Math.max(100, limit * 10),
+                limit: Math.max(25, limit * 2),
+              },
+            },
+          ];
+
+          // Apply post-search filters if user selected specific criteria
+          const filterStage: any = {};
+          if (sourceFilter) filterStage.source = sourceFilter;
+          if (categoryFilter) filterStage.category = categoryFilter;
+          if (scholarFilter) filterStage.scholar = { $regex: escapeRegExp(scholarFilter), $options: 'i' };
+
+          if (Object.keys(filterStage).length > 0) {
+            vectorPipeline.push({ $match: filterStage });
+          }
+
+          // Important optimization: Explicitly exclude 1536-dim embedding array from results
+          vectorPipeline.push(
+            {
+              $project: {
+                embedding: 0,
+              },
+            },
+            {
+              $project: {
+                score: { $meta: 'vectorSearchScore' },
+                id: 1,
+                source: 1,
+                source_url: 1,
+                title: 1,
+                question: 1,
+                answer: 1,
+                category: 1,
+                tags: 1,
+                scholar: 1,
+                published_date: 1,
+                sha256_hash: 1,
+                scraped_at: 1,
+                created_at: 1,
+                updated_at: 1,
+              },
+            },
+            { $skip: skip },
+            { $limit: limit }
+          );
+
+          const vectorResults = await collection.aggregate(vectorPipeline).toArray();
+          if (vectorResults && vectorResults.length > 0) {
+            docs = vectorResults;
+            total = vectorResults.length >= limit ? limit * page + 1 : (page - 1) * limit + vectorResults.length;
+            engineUsed = 'MongoDB Atlas Vector Search ($vectorSearch)';
+          }
+        }
+      } catch (vectorErr: any) {
+        // Graceful fallback if vector index is still building or not yet created
+        // Do not fail the search request; seamlessly fall through to text search
       }
-    } catch (atlasErr) {
-      usedAtlasSearch = false;
     }
 
-    // Resilient Regex Fallback
-    if (!usedAtlasSearch) {
+    // =========================================================================
+    // STEP B: Atlas Text Search Pipeline Fallback ($search)
+    // =========================================================================
+    if (docs.length === 0) {
+      try {
+        const pipeline = this.buildAtlasSearchPipeline(options, deterministicIntent);
+        const aggResults = await collection.aggregate(pipeline).toArray();
+        if (aggResults && aggResults.length > 0) {
+          docs = aggResults;
+          total = aggResults.length >= limit ? limit * page + 1 : (page - 1) * limit + aggResults.length;
+          engineUsed = 'MongoDB Atlas Search (Text Index)';
+        }
+      } catch {
+        // Fall through to regex
+      }
+    }
+
+    // =========================================================================
+    // STEP C: Resilient In-Database Regex & BM25 Scoring Fallback
+    // =========================================================================
+    if (docs.length === 0) {
       const searchTerms = Array.from(
         new Set([
           primaryQuery,
@@ -375,7 +444,10 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       if (categoryFilter) filter.category = categoryFilter;
       if (scholarFilter) filter.scholar = { $regex: escapeRegExp(scholarFilter), $options: 'i' };
 
-      const candidateDocs = await collection.find(filter).limit(150).toArray();
+      const candidateDocs = await collection
+        .find(filter, { projection: { embedding: 0 } })
+        .limit(150)
+        .toArray();
       total = candidateDocs.length;
 
       const scoredDocs = candidateDocs.map((doc: any) => {
@@ -416,23 +488,6 @@ export class MongoAtlasSearchEngine implements SearchEngine {
           }
         }
 
-        // High-Priority Technical Fiqh Term Matches (Highest Domain Weight)
-        if (aiIntent?.technical_fiqh_terms) {
-          for (const term of aiIntent.technical_fiqh_terms) {
-            const tLower = term.toLowerCase();
-            if (titleLower.includes(tLower)) {
-              score += 350.0;
-              matched.add(term);
-            } else if (questionLower.includes(tLower)) {
-              score += 260.0;
-              matched.add(term);
-            } else if (answerLower.includes(tLower)) {
-              score += 120.0;
-              matched.add(term);
-            }
-          }
-        }
-
         return {
           doc,
           score,
@@ -446,6 +501,7 @@ export class MongoAtlasSearchEngine implements SearchEngine {
         _score: s.score,
         _matched: s.matchedTerms,
       }));
+      engineUsed = 'MongoDB Atlas (Resilient Text)';
     }
 
     const allHighlightPool = Array.from(
@@ -488,9 +544,9 @@ export class MongoAtlasSearchEngine implements SearchEngine {
       limit,
       totalPages: Math.ceil(total / limit) || 1,
       tookMs: Date.now() - startTime,
-      engine: usedAtlasSearch ? this.name : `${this.name} (Resilient Text)`,
+      engine: engineUsed,
       facets,
-      semanticIntent: aiIntent || undefined,
+      semanticIntent: deterministicIntent || undefined,
     };
   }
 }

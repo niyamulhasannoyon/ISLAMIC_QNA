@@ -9,6 +9,7 @@ import { FatwaCard } from "@/components/FatwaCard";
 import { FatwaModal } from "@/components/FatwaModal";
 import { SkeletonLoader } from "@/components/SkeletonLoader";
 import { EmptyState } from "@/components/EmptyState";
+import { AISummaryBox } from "@/components/AISummaryBox";
 import { useLanguage } from "@/context/LanguageContext";
 import { SearchResponse, SearchResultItem, FacetCount, FiqhSemanticAnalysis } from "@/types/fatwa";
 import { ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
@@ -332,6 +333,15 @@ export default function Home() {
             <SkeletonLoader />
           ) : results.length > 0 ? (
             <div className="space-y-2.5 sm:space-y-3.5">
+              {/* On-Demand AI Summary with Mixtral */}
+              {debouncedQuery.trim().length >= 2 && (
+                <AISummaryBox
+                  query={debouncedQuery}
+                  results={results}
+                  onOpenModal={setActiveModalItem}
+                />
+              )}
+
               {results.map((item) => (
                 <FatwaCard
                   key={item.id}
