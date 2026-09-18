@@ -3,15 +3,24 @@ import { createOrUpdateUserAsync } from "@/lib/db";
 import { verifyGoogleToken, setUserSession } from "@/lib/userAuth";
 import { setAdminSession, isAllowedAdminEmail } from "@/lib/auth";
 import { safeErrorResponse } from "@/lib/apiErrors";
+import { verifyCsrf } from "@/lib/csrf";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = verifyCsrf(req);
+    if (!csrf.valid) {
+      return NextResponse.json(
+        { error: csrf.error || "Forbidden: CSRF validation failed" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { credentialToken, isAdminLogin } = body;
 
-    if (!credentialToken || typeof credentialToken !== "string") {
+    if (!credentialToken || typeof credentialToken !== "string" || credentialToken.length > 4096) {
       return NextResponse.json(
         { error: "Google প্রমাণীকরণ টোকেন (credentialToken) আবশ্যক।" },
         { status: 400 }

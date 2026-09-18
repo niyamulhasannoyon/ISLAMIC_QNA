@@ -94,11 +94,13 @@ export async function isAdminAuthenticated(): Promise<boolean> {
           const dbSession = await findDbSessionByTokenHashAsync(tokenHash);
           if (dbSession) {
             if (dbSession.role === 'admin') return true;
+            return false;
           } else {
-            // Cryptographic HMAC token is valid, unexpired, and email is allowlisted
-            return true;
+            // DB session record was deleted or revoked; do not trust stale token
+            return false;
           }
         } catch {
+          // If database is temporarily unreachable, rely on cryptographically valid token
           return true;
         }
       }

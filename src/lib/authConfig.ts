@@ -52,30 +52,35 @@ export function getAuthSecret(): string {
 }
 
 /**
- * Strictly authorized admin emails allowed to access the admin panel:
- * - niyamulhasanbd@gmail.com
- * - niyamulhasan1089@gmail.com
- */
-export const ALLOWED_ADMIN_EMAILS: readonly string[] = [
-  'niyamulhasanbd@gmail.com',
-  'niyamulhasan1089@gmail.com',
-];
-
-/**
  * Dynamically resolves allowed admin emails from ADMIN_EMAILS environment variable.
- * Fallbacks to ALLOWED_ADMIN_EMAILS if environment variable is missing or empty.
+ * Personal emails are NEVER hardcoded into the source code.
  */
 export function getAllowedAdminEmails(): string[] {
   const envEmails = process.env.ADMIN_EMAILS;
   if (!envEmails || envEmails.trim().length === 0) {
-    return [...ALLOWED_ADMIN_EMAILS];
+    return [];
   }
-  const configured = envEmails
+  return envEmails
     .split(',')
     .map((email) => email.toLowerCase().trim())
     .filter(Boolean);
-  return configured.length > 0 ? configured : [...ALLOWED_ADMIN_EMAILS];
 }
+
+/**
+ * Dynamic list for backward compatibility.
+ * Resolves strictly from ADMIN_EMAILS environment variable without hardcoded fallback.
+ */
+export const ALLOWED_ADMIN_EMAILS: readonly string[] = new Proxy([] as string[], {
+  get(target, prop) {
+    const list = getAllowedAdminEmails();
+    if (prop === 'length') return list.length;
+    if (prop === Symbol.iterator) return list[Symbol.iterator].bind(list);
+    if (typeof (list as any)[prop] === 'function') {
+      return (list as any)[prop].bind(list);
+    }
+    return (list as any)[prop];
+  },
+});
 
 /**
  * Checks if the given email is an authorized administrator.

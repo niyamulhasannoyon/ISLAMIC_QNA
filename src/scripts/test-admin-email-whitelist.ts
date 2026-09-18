@@ -22,34 +22,33 @@ async function runAdminWhitelistTests() {
 
   try {
     // ----------------------------------------------------
-    // TEST 1: Check ALLOWED_ADMIN_EMAILS definitions
+    // TEST 1: Check dynamic ADMIN_EMAILS resolution
     // ----------------------------------------------------
-    console.log('--- TEST 1: Default ALLOWED_ADMIN_EMAILS Definition ---');
+    console.log('--- TEST 1: Dynamic ADMIN_EMAILS Definition ---');
+    process.env.ADMIN_EMAILS = 'niyamulhasanbd@gmail.com,niyamulhasan1089@gmail.com';
     if (!ALLOWED_ADMIN_EMAILS.includes('niyamulhasanbd@gmail.com')) {
-      throw new Error('FAILED: niyamulhasanbd@gmail.com is missing from ALLOWED_ADMIN_EMAILS');
+      throw new Error('FAILED: niyamulhasanbd@gmail.com is missing from configured ADMIN_EMAILS');
     }
     if (!ALLOWED_ADMIN_EMAILS.includes('niyamulhasan1089@gmail.com')) {
-      throw new Error('FAILED: niyamulhasan1089@gmail.com is missing from ALLOWED_ADMIN_EMAILS');
+      throw new Error('FAILED: niyamulhasan1089@gmail.com is missing from configured ADMIN_EMAILS');
     }
     if (ALLOWED_ADMIN_EMAILS.length !== 2) {
       throw new Error(`FAILED: ALLOWED_ADMIN_EMAILS should contain exactly 2 emails, found ${ALLOWED_ADMIN_EMAILS.length}`);
     }
-    console.log('✅ ALLOWED_ADMIN_EMAILS contains exactly the 2 authorized emails:');
+    console.log('✅ Dynamic ALLOWED_ADMIN_EMAILS contains exactly the 2 authorized emails:');
     ALLOWED_ADMIN_EMAILS.forEach((email) => console.log(`   - ${email}`));
 
     // ----------------------------------------------------
-    // TEST 2: Check default fallback when ADMIN_EMAILS env is unset
+    // TEST 2: Check secure default when ADMIN_EMAILS env is unset (No hardcoded leak)
     // ----------------------------------------------------
     console.log('\n--- TEST 2: Fallback when ADMIN_EMAILS is unset ---');
     delete process.env.ADMIN_EMAILS;
     const fallbackEmails = getAllowedAdminEmails();
-    if (!fallbackEmails.includes('niyamulhasanbd@gmail.com') || !fallbackEmails.includes('niyamulhasan1089@gmail.com')) {
-      throw new Error('FAILED: Fallback did not return the authorized admin emails');
+    if (fallbackEmails.length !== 0) {
+      throw new Error(`FAILED: Expected 0 fallback emails when unset, got ${fallbackEmails.length}`);
     }
-    if (fallbackEmails.length !== 2) {
-      throw new Error(`FAILED: Expected 2 fallback emails, got ${fallbackEmails.length}`);
-    }
-    console.log('✅ Fallback correctly resolves to the 2 authorized admin emails when env var is unset.');
+    console.log('✅ Fallback correctly resolves to empty array when env var is unset (no hardcoded leak).');
+    process.env.ADMIN_EMAILS = 'niyamulhasanbd@gmail.com,niyamulhasan1089@gmail.com';
 
     // ----------------------------------------------------
     // TEST 3: Validation of authorized admin emails

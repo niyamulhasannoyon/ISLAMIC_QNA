@@ -18,10 +18,11 @@
     "test:search": "tsx src/scripts/test-search.ts",
     "test:banglish": "tsx src/scripts/test-banglish-search.ts",
     "test:api": "tsx src/scripts/test-api.ts",
-    "test:security": "tsx src/scripts/test-security-hardening.ts && tsx src/scripts/test-google-auth-security.ts && tsx src/scripts/test-admin-credentials-security.ts && tsx src/scripts/test-auth-session-security.ts",
+    "test:security": "tsx src/scripts/test-security-hardening.ts && tsx src/scripts/test-google-auth-security.ts && tsx src/scripts/test-admin-credentials-security.ts && tsx src/scripts/test-auth-session-security.ts && tsx src/scripts/test-comprehensive-security.ts",
     "test:hygiene-security": "tsx src/scripts/test-hygiene-and-security.ts",
     "test:admin-creds": "tsx src/scripts/test-admin-credentials-security.ts",
-    "test:session-security": "tsx src/scripts/test-auth-session-security.ts"
+    "test:session-security": "tsx src/scripts/test-auth-session-security.ts",
+    "test:comprehensive-security": "tsx src/scripts/test-comprehensive-security.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",

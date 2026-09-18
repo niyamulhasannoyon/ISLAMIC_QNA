@@ -48,16 +48,33 @@ function cleanupMemoryStore() {
  * Extracts client IP address safely from standard proxy headers
  */
 export function getClientIp(req: NextRequest): string {
+  // 1. Check trusted edge proxy headers set by Vercel / reverse proxy
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp && realIp.trim()) {
+    const clean = realIp.trim();
+    if (/^[a-fA-F0-9.:]+$/.test(clean)) return clean;
+  }
+
+  const vercelIp = req.headers.get('x-vercel-forwarded-for');
+  if (vercelIp && vercelIp.trim()) {
+    const clean = vercelIp.split(',')[0].trim();
+    if (/^[a-fA-F0-9.:]+$/.test(clean)) return clean;
+  }
+
+  const directIp = (req as any).ip;
+  if (directIp && typeof directIp === 'string') {
+    const clean = directIp.trim();
+    if (/^[a-fA-F0-9.:]+$/.test(clean)) return clean;
+  }
+
+  // 2. Fallback to x-forwarded-for
   const forwardedFor = req.headers.get('x-forwarded-for');
   if (forwardedFor) {
     const firstIp = forwardedFor.split(',')[0].trim();
-    if (firstIp) return firstIp;
+    if (firstIp && /^[a-fA-F0-9.:]+$/.test(firstIp)) return firstIp;
   }
 
-  const realIp = req.headers.get('x-real-ip');
-  if (realIp && realIp.trim()) return realIp.trim();
-
-  return (req as any).ip || '127.0.0.1';
+  return '127.0.0.1';
 }
 
 /**

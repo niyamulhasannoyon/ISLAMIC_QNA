@@ -69,13 +69,12 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
 
   // Legacy HMAC-SHA256 fallback for existing credentials
   try {
-    let secret = process.env.AUTH_SECRET || process.env.INGESTION_SECRET_TOKEN;
+    const secret =
+      process.env.AUTH_SECRET ||
+      process.env.INGESTION_SECRET_TOKEN ||
+      process.env.LEGACY_AUTH_SECRET;
     if (!secret) {
-      try {
-        secret = getAuthSecret();
-      } catch {
-        secret = 'fatwa_archive_jwt_secret_key_2026';
-      }
+      return false;
     }
     const legacyHash = crypto.createHmac("sha256", secret).update(password).digest("hex");
     const legBuffer = Buffer.from(legacyHash, "hex");
@@ -182,9 +181,12 @@ export async function getCurrentUserSession(): Promise<UserSession | null> {
       const dbSession = await findDbSessionByTokenHashAsync(tokenHash);
       if (dbSession) {
         targetUserId = dbSession.user_id;
+      } else {
+        // If DB session was deleted (logout or revocation), invalidate immediately
+        return null;
       }
     } catch {
-      // Ephemeral or DB connection error; rely on signed token
+      // Ephemeral or DB connection error; rely on verified signed token
     }
 
     // 3. Ensure user still exists in database and reflect latest status
@@ -265,8 +267,12 @@ export async function verifyGoogleToken(credentialToken: string): Promise<{
   try {
     const clientId =
       process.env.GOOGLE_CLIENT_ID ||
-      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-      '613533933761-4j489d46m3h3368uqkp7t98u33t9fjli.apps.googleusercontent.com';
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+    if (!clientId) {
+      console.warn("Google token verification failed: GOOGLE_CLIENT_ID is not configured.");
+      return null;
+    }
 
     const client = new OAuth2Client(clientId);
     const ticket = await client.verifyIdToken({

@@ -4,6 +4,7 @@ import "./globals.css";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { AnalyticsTracker } from "@/components/AnalyticsTracker";
 import { getSiteUrl } from "@/lib/utils";
+import { serializeJsonLd } from "@/lib/sanitizer";
 
 const siteUrl = getSiteUrl();
 
@@ -148,11 +149,11 @@ export default function RootLayout({
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLdWebsite) }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdOrg) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLdOrg) }}
         />
         {/* Google Identity Services SDK for Sign in with Google */}
         <script src="https://accounts.google.com/gsi/client" async defer />

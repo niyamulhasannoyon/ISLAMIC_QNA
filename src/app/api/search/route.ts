@@ -3,6 +3,9 @@ import { getMongoDb, isMongoConfigured } from '@/lib/db/mongodb';
 import { normalizeSearchQuery } from '@/lib/ai/normalizeQuery';
 import { getEmbedding, isEmbeddingConfigured } from '@/lib/ai/embedding';
 import { searchFatwas } from '@/lib/search';
+import { escapeRegExp } from '@/lib/utils';
+import { safeErrorResponse } from '@/lib/apiErrors';
+import { SearchQuerySchema } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +26,27 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const rawQuery = (searchParams.get('q') || searchParams.get('query') || '').trim();
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)));
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const source = searchParams.get('source') || undefined;
-    const category = searchParams.get('category') || undefined;
-    const scholar = searchParams.get('scholar') || undefined;
+
+    const parseResult = SearchQuerySchema.safeParse({
+      q: searchParams.get('q') || searchParams.get('query') || '',
+      source: searchParams.get('source') || undefined,
+      category: searchParams.get('category') || undefined,
+      scholar: searchParams.get('scholar') || undefined,
+      page: searchParams.get('page') || undefined,
+      limit: searchParams.get('limit') || undefined,
+    });
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: 'অনুসন্ধান প্যারামিটার অবৈধ',
+          details: parseResult.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { q: rawQuery, limit, page, source, category, scholar } = parseResult.data;
 
     // Empty query fallback to standard browse
     if (!rawQuery) {
@@ -76,7 +94,7 @@ export async function GET(req: NextRequest) {
         const matchStage: any = {};
         if (source && source !== 'All') matchStage.source = source.toLowerCase();
         if (category && category !== 'All') matchStage.category = category;
-        if (scholar && scholar !== 'All') matchStage.scholar = { $regex: scholar, $options: 'i' };
+        if (scholar && scholar !== 'All') matchStage.scholar = { $regex: escapeRegExp(scholar), $options: 'i' };
 
         if (Object.keys(matchStage).length > 0) {
           vectorPipeline.push({ $match: matchStage });
@@ -184,29 +202,27 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (err: any) {
-    console.error('[Search API Error]:', err);
-    return NextResponse.json(
-      {
-        error: 'Search processing error',
-        message: err?.message || 'Unknown internal error',
-      },
-      { status: 500 }
-    );
+    return safeErrorResponse('Search processing error', 500, err);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const query = body.q || body.query || '';
-    const limit = body.limit || 10;
-    const page = body.page || 1;
-    const source = body.source;
-    const category = body.category;
-    const scholar = body.scholar;
+    const body = await req.json().catch(() => ({}));
+    const parseResult = SearchQuerySchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: 'অনুসন্ধান প্যারামিটার অবৈধ',
+          details: parseResult.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
 
+    const { q, limit, page, source, category, scholar } = parseResult.data;
     const url = new URL(req.url);
-    url.searchParams.set('q', query);
+    url.searchParams.set('q', q);
     url.searchParams.set('limit', String(limit));
     url.searchParams.set('page', String(page));
     if (source) url.searchParams.set('source', source);
@@ -216,6 +232,6 @@ export async function POST(req: NextRequest) {
     const getReq = new NextRequest(url, { method: 'GET', headers: req.headers });
     return GET(getReq);
   } catch (err: any) {
-    return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
+    return safeErrorResponse('Search request failed', 400, err);
   }
 }

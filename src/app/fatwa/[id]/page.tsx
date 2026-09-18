@@ -8,6 +8,7 @@ import { Header } from "@/components/Header";
 import { FatwaDetailHeader } from "@/components/FatwaDetailHeader";
 import { ShareButtons } from "@/components/ShareButtons";
 import { FatwaQA } from "@/types/fatwa";
+import { serializeJsonLd } from "@/lib/sanitizer";
 import {
   ArrowLeft,
   ArrowRight,
@@ -330,20 +331,20 @@ export default async function FatwaPage({ params }: Props) {
       {/* Schema.org Structured Data */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(qaSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(qaSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbSchema) }}
       />
       {relatedItemListSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(relatedItemListSchema) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(relatedItemListSchema) }}
         />
       )}
 

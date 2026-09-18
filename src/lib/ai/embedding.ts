@@ -1,22 +1,11 @@
 import OpenAI from 'openai';
-import fs from 'fs';
-import path from 'path';
 
 // Default vector dimension for text-embedding-3-small
 export const VECTOR_DIMENSIONS = 1536;
 export const EMBEDDING_MODEL = 'text-embedding-3-small';
 
 function getOpenAIKey(): string | undefined {
-  if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-  try {
-    const envPath = path.resolve(process.cwd(), '.env.local');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf8');
-      const match = content.match(/OPENAI_API_KEY=([^\s\r\n]+)/);
-      if (match) return match[1];
-    }
-  } catch {}
-  return undefined;
+  return process.env.OPENAI_API_KEY;
 }
 
 let openaiClient: OpenAI | null = null;

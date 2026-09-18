@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { transliterateQuery, isLatinScript } from '../search/transliterate';
 import { getDeterministicFiqhFallback } from './semantic';
 
@@ -18,16 +16,7 @@ const normalizationCache = new Map<string, NormalizedQueryResult>();
 const MAX_CACHE_SIZE = 1000;
 
 function getEnvVar(key: string): string | undefined {
-  if (process.env[key]) return process.env[key];
-  try {
-    const envPath = path.resolve(process.cwd(), '.env.local');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf8');
-      const match = content.match(new RegExp(`${key}=([^\\s\\r\\n]+)`));
-      if (match) return match[1];
-    }
-  } catch {}
-  return undefined;
+  return process.env[key];
 }
 
 const SYSTEM_NORMALIZATION_PROMPT = `You are an Islamic legal (Fiqh) search query normalizer for an authentic Islamic Q&A database.

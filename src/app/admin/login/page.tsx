@@ -42,7 +42,7 @@ export default function AdminLoginPage() {
         router.push('/admin');
         router.refresh();
       } else {
-        setError('অননুমোদিত এডমিন একাউন্ট। শুধুমাত্র অনুমোদিত এডমিন ইমেইল (niyamulhasanbd@gmail.com / niyamulhasan1089@gmail.com) দিয়ে লগইন করুন।');
+        setError('অননুমোদিত এডমিন একাউন্ট। এই একাউন্টটির এডমিন প্যানেলে প্রবেশের অনুমতি নেই।');
       }
     } catch (err: any) {
       setError(err?.message || 'গুগল সাইন-ইন সম্পন্ন করা যায়নি।');
@@ -78,9 +78,11 @@ export default function AdminLoginPage() {
   }, [router]);
 
   useEffect(() => {
-    const clientId =
-      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-      '613533933761-4j489d46m3h3368uqkp7t98u33t9fjli.apps.googleusercontent.com';
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+    if (!clientId) {
+      setBlockedNotice(true);
+      return;
+    }
 
     let isSubscribed = true;
 

@@ -2,7 +2,7 @@ import { MongoClient, Db } from 'mongodb';
 import { User } from '@/types/user';
 import { FatwaQA, IngestItemInput, IngestResultItem, SearchFacets, FatwaSource } from '@/types/fatwa';
 import { computeFatwaHash, hashToUuid, normalizeText } from '../hash';
-import { extractIdFromSlug } from '@/lib/utils';
+import { extractIdFromSlug, escapeRegExp } from '@/lib/utils';
 import { getEmbedding, formatFatwaForEmbedding, isEmbeddingConfigured } from '../ai/embedding';
 
 const uri = process.env.MONGODB_URI;
@@ -346,10 +346,11 @@ export async function upsertFatwaMongo(item: IngestItemInput): Promise<IngestRes
 
 export async function deleteFatwaMongo(id: string): Promise<boolean> {
   const db = await getMongoDb();
-  if (!db) return false;
+  if (!db || !id || typeof id !== 'string') return false;
 
+  const sanitizedId = id.trim().slice(0, 128);
   const res = await db.collection('fatwas').deleteOne({
-    $or: [{ id }, { _id: id as any }],
+    $or: [{ id: sanitizedId }, { _id: sanitizedId as any }],
   });
 
   return (res.deletedCount || 0) > 0;
@@ -368,17 +369,18 @@ export async function listFatwasMongo(options: {
   const collection = db.collection('fatwas');
   const filter: any = {};
 
-  if (options.q) {
-    const regex = new RegExp(options.q, 'i');
+  if (options.q && typeof options.q === 'string') {
+    const escaped = escapeRegExp(options.q.trim().slice(0, 300));
+    const regex = new RegExp(escaped, 'i');
     filter.$or = [{ title: regex }, { question: regex }, { scholar: regex }];
   }
 
-  if (options.source && options.source !== 'All') {
-    filter.source = options.source;
+  if (options.source && typeof options.source === 'string' && options.source !== 'All') {
+    filter.source = options.source.trim().toLowerCase();
   }
 
-  if (options.category && options.category !== 'All') {
-    filter.category = options.category;
+  if (options.category && typeof options.category === 'string' && options.category !== 'All') {
+    filter.category = options.category.trim();
   }
 
   const page = Math.max(1, options.page || 1);

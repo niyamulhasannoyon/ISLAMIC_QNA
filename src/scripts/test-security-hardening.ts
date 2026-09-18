@@ -40,8 +40,9 @@ async function runSecurityHardeningTests() {
   console.log('✅ scrypt password verification verified successfully.');
 
   // Test legacy HMAC-SHA256 backward compatibility
-  const secret = process.env.INGESTION_SECRET_TOKEN || 'fatwa_archive_jwt_secret_key_2026';
-  const legacyHmacHash = crypto.createHmac('sha256', secret).update(password).digest('hex');
+  const testSecret = 'test_secret_for_legacy_hmac_backward_compatibility_32chars!';
+  process.env.AUTH_SECRET = testSecret;
+  const legacyHmacHash = crypto.createHmac('sha256', testSecret).update(password).digest('hex');
   if (!verifyPassword(password, legacyHmacHash)) {
     throw new Error('FAILED: Legacy HMAC backward compatibility verification failed');
   }

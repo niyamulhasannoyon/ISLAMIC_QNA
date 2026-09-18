@@ -168,9 +168,11 @@ function AuthModalDialog({ isOpen, onClose, onSuccess, isAdminMode = false }: Au
     if (!isOpen) return;
 
     let isMounted = true;
-    const clientId =
-      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-      "613533933761-4j489d46m3h3368uqkp7t98u33t9fjli.apps.googleusercontent.com";
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+    if (!clientId) {
+      setBlockedNotice(true);
+      return;
+    }
 
     const setupGoogle = () => {
       if (typeof window !== "undefined" && (window as any).google?.accounts?.id && googleBtnRef.current) {

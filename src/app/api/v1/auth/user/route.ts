@@ -12,6 +12,7 @@ import {
 } from "@/lib/userAuth";
 
 import { safeErrorResponse } from "@/lib/apiErrors";
+import { verifyCsrf } from "@/lib/csrf";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,17 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, email, password, name } = body;
+
+    // Verify CSRF for state-changing authentication actions
+    if (action === "register" || action === "login" || action === "logout") {
+      const csrf = verifyCsrf(req);
+      if (!csrf.valid) {
+        return NextResponse.json(
+          { error: csrf.error || "Forbidden: CSRF validation failed" },
+          { status: 403 }
+        );
+      }
+    }
 
     // Check status action
     if (action === "check") {
@@ -44,14 +56,38 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (password.length < 6) {
+      const emailTrimmed = String(email).trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailTrimmed) || emailTrimmed.length > 254) {
         return NextResponse.json(
-          { error: "পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে" },
+          { error: "একটি সঠিক ইমেইল ঠিকানা প্রদান করুন।" },
           { status: 400 }
         );
       }
 
-      const existingUser = await findUserByEmailAsync(email);
+      const nameTrimmed = String(name).trim();
+      if (nameTrimmed.length < 2 || nameTrimmed.length > 100) {
+        return NextResponse.json(
+          { error: "নাম ২ থেকে ১০০ অক্ষরের মধ্যে হতে হবে।" },
+          { status: 400 }
+        );
+      }
+
+      if (typeof password !== "string" || password.length < 8) {
+        return NextResponse.json(
+          { error: "পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে।" },
+          { status: 400 }
+        );
+      }
+
+      if (password.length > 128) {
+        return NextResponse.json(
+          { error: "পাসওয়ার্ড সর্বোচ্চ ১২৮ অক্ষরের হতে পারবে।" },
+          { status: 400 }
+        );
+      }
+
+      const existingUser = await findUserByEmailAsync(emailTrimmed);
       if (existingUser && existingUser.password_hash) {
         return NextResponse.json(
           { error: "এই ইমেইল দিয়ে ইতিমধ্যে একটি একাউন্ট খোলা আছে। লগইন করুন।" },
@@ -61,8 +97,8 @@ export async function POST(req: NextRequest) {
 
       const password_hash = hashPassword(password);
       const user = await createOrUpdateUserAsync({
-        email,
-        name,
+        email: emailTrimmed,
+        name: nameTrimmed,
         password_hash,
         role: "user",
         provider: "credentials",
@@ -91,7 +127,15 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const user = await findUserByEmailAsync(email);
+      const emailTrimmed = String(email).trim().toLowerCase();
+      if (emailTrimmed.length > 254 || (typeof password === "string" && password.length > 128)) {
+        return NextResponse.json(
+          { error: "ভুল ইমেইল অথবা পাসওয়ার্ড" },
+          { status: 401 }
+        );
+      }
+
+      const user = await findUserByEmailAsync(emailTrimmed);
       if (!user || !user.password_hash) {
         return NextResponse.json(
           { error: "ভুল ইমেইল অথবা পাসওয়ার্ড" },

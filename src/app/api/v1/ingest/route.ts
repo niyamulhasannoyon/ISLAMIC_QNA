@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { syncFatwaBatch } from '@/lib/pipeline/ingest';
 import { refreshSearchIndex } from '@/lib/search';
@@ -33,25 +34,32 @@ const IngestPayloadSchema = z.union([
   }),
 ]);
 
+function constantTimeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 function verifyToken(req: NextRequest): boolean {
   const secret = process.env.INGESTION_SECRET_TOKEN;
-  if (!secret) {
-    if (process.env.NODE_ENV !== 'production') {
-      return true;
-    }
+  if (!secret || secret.trim().length === 0) {
+    console.error('[Ingest Security]: INGESTION_SECRET_TOKEN is not configured. Rejecting request.');
     return false;
   }
+
+  const normalizedSecret = secret.trim();
 
   const authHeader = req.headers.get('authorization');
   if (authHeader) {
     const parts = authHeader.split(' ');
     if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
-      if (parts[1] === secret) return true;
+      if (constantTimeEqual(parts[1], normalizedSecret)) return true;
     }
   }
 
   const customHeader = req.headers.get('x-ingest-token');
-  if (customHeader && customHeader === secret) {
+  if (customHeader && constantTimeEqual(customHeader, normalizedSecret)) {
     return true;
   }
 

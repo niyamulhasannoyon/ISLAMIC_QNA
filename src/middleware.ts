@@ -4,8 +4,8 @@ import { checkRateLimit, RateLimitTier } from './lib/rateLimit';
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Only apply rate limiting to /api/v1 routes
-  if (pathname.startsWith('/api/v1/')) {
+  // Apply rate limiting to all API routes (/api/*)
+  if (pathname.startsWith('/api/')) {
     let tier: RateLimitTier = 'default';
 
     if (pathname.startsWith('/api/v1/auth') || pathname.startsWith('/api/v1/admin/auth')) {
@@ -14,7 +14,7 @@ export async function middleware(req: NextRequest) {
       tier = 'rag';
     } else if (pathname.startsWith('/api/v1/ingest')) {
       tier = 'ingest';
-    } else if (pathname.startsWith('/api/v1/search')) {
+    } else if (pathname.startsWith('/api/v1/search') || pathname.startsWith('/api/search')) {
       tier = 'search';
     }
 
@@ -49,5 +49,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/v1/:path*'],
+  matcher: ['/api/:path*'],
 };
