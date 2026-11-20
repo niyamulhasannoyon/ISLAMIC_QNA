@@ -159,8 +159,10 @@ export async function runSearchEvaluation() {
 }
 
 if (require.main === module || process.argv[1]?.endsWith('eval-search.ts')) {
-  runSearchEvaluation().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+  runSearchEvaluation()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
 }
