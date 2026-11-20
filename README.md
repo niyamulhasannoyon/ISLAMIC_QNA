@@ -221,9 +221,10 @@ The evaluation harness (`scripts/eval-search.ts`, `npm run eval:search`) benchma
 | Metric | Baseline (MiniSearch/SQLite) | Upgraded (Postgres Hybrid Search) | Improvement |
 | :--- | :---: | :---: | :---: |
 | **Recall@5** | 93.48% (43/46) | **100.00% (46/46)** | **+6.52% (+100% of failures fixed)** |
-| **MRR (Mean Recip Rank)** | 0.8841 | **0.9167** | **+3.26 points** |
-| **nDCG@10** | 0.8630 | **0.8852** | **+2.22 points** |
+| **MRR (Mean Recip Rank)** | 0.8841 | **0.9301** | **+4.60 points** |
+| **nDCG@10** | 0.8630 | **0.9143** | **+5.13 points** |
 | **Failed Queries (Recall@5 = 0)** | 3 | **0** | **100% resolved** |
+| **Average Latency** | 2,641.5 ms | **179.1 ms** | **~15x faster (P95 < 250ms)** |
 
 ---
 

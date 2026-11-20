@@ -106,3 +106,41 @@ export function sanitizeFatwaInput<T extends {
       : [],
   };
 }
+
+/**
+ * Validates that a URL is a public HTTP/HTTPS URL and does not point
+ * to private IP ranges, localhost, or cloud metadata endpoints (SSRF mitigation).
+ */
+export function isSafePublicUrl(urlStr: string): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    // Block localhost, loopback 127.0.0.0/8, ::1, and 0.0.0.0/8
+    if (
+      host === 'localhost' ||
+      host === '::1' ||
+      /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      /^0\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+    ) {
+      return false;
+    }
+    // Block cloud metadata service (AWS/GCP/Azure)
+    if (host === '169.254.169.254' || host === 'metadata.google.internal') {
+      return false;
+    }
+    // Block private RFC 1918 IPv4 ranges
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    // Block link-local IPv4 range
+    if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+

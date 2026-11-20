@@ -70,6 +70,7 @@ export const SearchResponseSchema = z.object({
   facets: SearchFacetsSchema,
   timingMs: z.number().optional(),
   intent: z.record(z.any()).optional(),
+  didYouMean: z.string().nullable().optional(),
 });
 
 export const RAGQuerySchema = z.object({

@@ -13,6 +13,12 @@ export function useHaptics() {
     } catch {}
   };
 
+  const heavy = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch {}
+  };
+
   const selection = () => {
     try {
       Haptics.selectionAsync();
@@ -25,5 +31,5 @@ export function useHaptics() {
     } catch {}
   };
 
-  return { light, medium, selection, notificationSuccess };
+  return { light, medium, heavy, selection, notificationSuccess };
 }

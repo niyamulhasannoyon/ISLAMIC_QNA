@@ -113,11 +113,17 @@ const nextConfig = {
   },
   transpilePackages: ['@repo/text-utils', '@repo/api-client'],
   experimental: {
-    serverComponentsExternalPackages: ['better-sqlite3'],
+    serverComponentsExternalPackages: ['better-sqlite3', '@xenova/transformers', 'onnxruntime-node'],
     outputFileTracingIncludes: {
       '/api/**/*': ['./data/**/*', '../../data/**/*'],
       '/**/*': ['./data/**/*', '../../data/**/*'],
     },
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = [...(config.externals || []), 'onnxruntime-node', '@xenova/transformers'];
+    }
+    return config;
   },
 };
 

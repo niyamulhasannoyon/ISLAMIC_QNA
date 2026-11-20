@@ -45,32 +45,34 @@ export function SafeHighlight({ text, className, as: Component = 'span' }: SafeH
       return <Component className={className}>{decodeBasicHtmlEntities(clean)}</Component>;
     }
 
-  return (
-    <Component className={className}>
-      {parts.map((part, index) => {
-        const markMatch = part.match(/^<mark[^>]*>([\s\S]*?)<\/mark>$/i);
+    return (
+      <Component className={className}>
+        {parts.map((part, index) => {
+          if (!part) return null;
+          const markMatch = part.match(/^<mark[^>]*>([\s\S]*?)<\/mark>$/i);
 
-        if (markMatch) {
-          // Extract text inside <mark>, strip any nested tags, decode entities
-          const innerContent = stripHtmlTags(markMatch[1]);
-          const decoded = decodeBasicHtmlEntities(innerContent);
-          return (
-            <mark
-              key={index}
-              className="bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold px-0.5 rounded"
-            >
-              {decoded}
-            </mark>
-          );
-        }
+          if (markMatch) {
+            // Extract text inside <mark>, strip any nested tags, decode entities
+            const innerContent = stripHtmlTags(markMatch[1]);
+            const decoded = decodeBasicHtmlEntities(innerContent);
+            return (
+              <mark
+                key={index}
+                className="bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold px-0.5 rounded"
+              >
+                {decoded}
+              </mark>
+            );
+          }
 
-        // Text outside mark tags - strip any rogue tags and decode
-        const cleanPart = stripHtmlTags(part);
-        const decodedPart = decodeBasicHtmlEntities(cleanPart);
-        return <React.Fragment key={index}>{decodedPart}</React.Fragment>;
-      })}
-    </Component>
-  );
+          // Text outside mark tags - strip any rogue tags and decode
+          const cleanPart = stripHtmlTags(part);
+          const decodedPart = decodeBasicHtmlEntities(cleanPart);
+          if (!decodedPart) return null;
+          return <React.Fragment key={index}>{decodedPart}</React.Fragment>;
+        })}
+      </Component>
+    );
   } catch {
     return <Component className={className}>{String(text)}</Component>;
   }

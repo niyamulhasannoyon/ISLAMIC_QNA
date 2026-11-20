@@ -185,6 +185,9 @@ export function SearchHero({
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="search-suggestions-list"
             value={query}
             aria-label={t.searchHero.placeholder}
             aria-expanded={isDropdownOpen}
@@ -246,7 +249,7 @@ export function SearchHero({
               <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2 px-1">
                 {t.searchHero.popularInquiries}
               </div>
-              <div className="space-y-1">
+              <div id="search-suggestions-list" role="listbox" className="space-y-1">
                 {suggestions.map((sug, idx) => (
                   <button
                     key={idx}

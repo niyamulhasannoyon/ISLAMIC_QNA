@@ -34,8 +34,8 @@ jobs:
       - name: Lint All Workspaces
         run: npx turbo run lint
 
-      - name: Run Package & Unit Tests
-        run: npx turbo run test --filter=@repo/text-utils --filter=@repo/api-client
+      - name: Run Vitest Monorepo Unit Tests
+        run: npx vitest run
 
       - name: Run Web Security & Hygiene Tests
         run: npm run test:security --workspace=@repo/web && npm run test:hygiene-security --workspace=@repo/web
