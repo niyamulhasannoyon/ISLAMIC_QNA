@@ -191,7 +191,11 @@ export const SYNONYM_GROUPS: SynonymGroup[] = [
   },
   {
     canonical: 'যাকাতুল ফিতর',
-    variants: ['ফিতরা', 'ফিৎরা', 'সাদাকাতুল ফিতর', 'সদকাতুল ফিতর', 'fitra', 'fitrah', 'zakat al fitr', 'زكاة الفطر'],
+    variants: [
+      'ফিতরা', 'ফিৎরা', 'ফিত্বর', 'সাদাকাতুল ফিতর', 'সদকাতুল ফিতর',
+      'ছাদাক্বাতুল ফিত্বর', 'ছাদাকাতুল ফিতর', 'fitra', 'fitrah',
+      'zakat al fitr', 'زكاة الفطر', 'الفطر', 'فطر'
+    ],
   },
   {
     canonical: 'নিসাব',

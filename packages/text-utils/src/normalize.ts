@@ -51,6 +51,7 @@ export const STOP_WORDS = new Set([
   'jay', 'jabe', 'dile', 'dewa', 'deya', 'neya', 'obostha', 'obosthay',
   'kon', 'kono', 'je', 'ja', 'jar', 'ebong', 'ba', 'othoba', 'kintu', 'o', 'ar',
   'somporke', 'bishoye', 'bapare', 'niye', 'chara', 'chada',
+  'niyom', 'hukum', 'bidhan', 'poddhoti', 'amol', 'koto', 'kototuku',
   // English Stopwords
   'what', 'how', 'ruling', 'about', 'the', 'is', 'of', 'in', 'on', 'at', 'to', 'for', 'from', 'with', 'and', 'or', 'can', 'i'
 ]);

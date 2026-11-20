@@ -4,6 +4,8 @@
  * Used identically for document indexing and query-time processing.
  */
 
+import { getCanonicalTerm } from './synonyms';
+
 // Bengali digits to Latin digits map
 const BENGALI_DIGIT_MAP: Record<string, string> = {
   '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
@@ -130,6 +132,12 @@ export function stemBengali(token: string): string {
 
   for (const suffix of BENGALI_SUFFIXES) {
     if (clean.endsWith(suffix) && (clean.length - suffix.length) >= 2) {
+      if (suffix === 'তে' || suffix === 'কে') {
+        const charBeforeE = clean[clean.length - 2];
+        if (/[\u0995-\u09B9]/u.test(charBeforeE)) {
+          return clean.slice(0, -1);
+        }
+      }
       return clean.slice(0, clean.length - suffix.length);
     }
   }
@@ -164,9 +172,15 @@ export function processTokens(text: string, filterStopwords: boolean = true): st
     if (filterStopwords && isStopword(token)) {
       continue;
     }
-    const stemmed = stemBengali(token);
-    if (stemmed.length >= 2) {
-      tokens.push(stemmed);
+    const directStem = stemBengali(token);
+    const directCanonical = getCanonicalTerm(token);
+    const stemmedCanonical = getCanonicalTerm(directStem);
+    const canonical = directCanonical !== token ? directCanonical : stemmedCanonical;
+    const finalStem = stemBengali(canonical);
+    const tokenToAdd = finalStem.length >= 2 ? finalStem : canonical;
+
+    if (tokenToAdd.length >= 2) {
+      tokens.push(tokenToAdd);
     } else if (token.length >= 2) {
       tokens.push(token);
     }
