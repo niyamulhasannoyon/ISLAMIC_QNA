@@ -3,6 +3,7 @@ import { SearchEngine } from './search/types';
 import { LocalBengaliSearchEngine, generateHighlightedSnippet } from './search/local';
 import { MeilisearchEngine } from './search/meilisearch';
 import { MongoAtlasSearchEngine } from './search/mongodb';
+import { PostgresSearchEngine } from './search/postgres';
 import { getAllFatwas } from './db';
 
 // Singleton instance across hot reloads in Next.js
@@ -12,7 +13,11 @@ declare global {
 }
 
 export function createSearchEngine(): SearchEngine {
-  const provider = (process.env.SEARCH_ENGINE || (process.env.MONGODB_URI ? 'mongodb' : 'local')).toLowerCase();
+  const provider = (process.env.SEARCH_ENGINE || (process.env.DATABASE_URL || process.env.POSTGRES_URL ? 'postgres' : process.env.MONGODB_URI ? 'mongodb' : 'local')).toLowerCase();
+
+  if (provider === 'postgres') {
+    return new PostgresSearchEngine();
+  }
 
   if (provider === 'meilisearch' && process.env.MEILISEARCH_HOST) {
     return new MeilisearchEngine();
@@ -60,4 +65,5 @@ export * from './search/types';
 export { LocalBengaliSearchEngine } from './search/local';
 export { MeilisearchEngine } from './search/meilisearch';
 export { MongoAtlasSearchEngine } from './search/mongodb';
+export { PostgresSearchEngine } from './search/postgres';
 

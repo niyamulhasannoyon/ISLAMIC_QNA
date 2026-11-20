@@ -77,8 +77,20 @@ export async function GET(req: NextRequest) {
       ? 'no-store, max-age=0, must-revalidate'
       : 'public, s-maxage=60, stale-while-revalidate=300';
 
+    const isDebugAllowed =
+      searchParams.get('debug') === '1' &&
+      (process.env.NODE_ENV !== 'production' || process.env.SEARCH_DEBUG === 'true');
+
+    const sanitizedResults = isDebugAllowed
+      ? result.results
+      : result.results.map((item) => {
+          const { debug, ...rest } = item as any;
+          return rest;
+        });
+
     const responsePayload = {
       ...result,
+      results: sanitizedResults,
       ...(searchEventId ? { searchEventId } : {}),
     };
 

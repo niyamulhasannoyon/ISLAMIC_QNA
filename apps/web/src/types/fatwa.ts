@@ -118,6 +118,7 @@ export interface SearchResponse {
   searchEventId?: string;
   facets: SearchFacets;
   semanticIntent?: FiqhSemanticAnalysis;
+  didYouMean?: string | null;
 }
 
 export type ReportIssueType = 'typo' | 'factual_error' | 'broken_link' | 'wrong_category' | 'scholarly_dispute' | 'other';
