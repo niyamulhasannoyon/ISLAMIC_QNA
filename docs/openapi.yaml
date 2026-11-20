@@ -1,0 +1,552 @@
+openapi: 3.1.0
+info:
+  title: Fatwa Search Platform API
+  description: >
+    Production REST API specification for the Fatwa Search Platform, providing
+    full-text & semantic search, fatwa retrieval, RAG AI answering, batch ingestion,
+    and admin/analytics services.
+  version: 1.0.0
+servers:
+  - url: /
+    description: Current deployment origin
+
+paths:
+  /api/v1/search:
+    get:
+      summary: Search fatwas
+      description: Search across all ingested fatwas with full-text, transliteration, phonetic expansion, and facets.
+      parameters:
+        - name: q
+          in: query
+          description: Search query text (Bengali, English, or Banglish)
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+            default: ""
+        - name: source
+          in: query
+          description: Filter by publisher source
+          required: false
+          schema:
+            type: string
+            enum: [al-itisam, at-tahreek, al-kawsar, All]
+        - name: category
+          in: query
+          description: Filter by Islamic category
+          required: false
+          schema:
+            type: string
+        - name: scholar
+          in: query
+          description: Filter by answering scholar
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Successful search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/fatwa/{id}:
+    get:
+      summary: Get fatwa details by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique fatwa identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fatwa details with related fatwas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FatwaDetail'
+        '400':
+          description: Missing or invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Fatwa not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/rag:
+    post:
+      summary: Generate AI RAG answer for a fiqh question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGRequest'
+      responses:
+        '200':
+          description: Generated synthesis with grounded fatwa sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RAGResponse'
+        '400':
+          description: Invalid question input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/analytics/track:
+    post:
+      summary: Track user search or interaction event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackEventRequest'
+      responses:
+        '200':
+          description: Event tracked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ingest:
+    post:
+      summary: Batch ingest new fatwas
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FatwaIngestionBatchRequest'
+      responses:
+        '200':
+          description: Ingestion result summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/auth:
+    post:
+      summary: Admin authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authentication result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authenticated:
+                    type: boolean
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    FatwaSource:
+      type: string
+      enum: [al-itisam, at-tahreek, al-kawsar]
+
+    FatwaQA:
+      type: object
+      required:
+        - id
+        - source
+        - source_url
+        - title
+        - question
+        - answer
+        - category
+        - tags
+        - scholar
+        - published_date
+        - sha256_hash
+        - scraped_at
+      properties:
+        id:
+          type: string
+        source:
+          $ref: '#/components/schemas/FatwaSource'
+        source_url:
+          type: string
+        title:
+          type: string
+        question:
+          type: string
+        answer:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        scholar:
+          type: string
+        published_date:
+          type: string
+        sha256_hash:
+          type: string
+        scraped_at:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    RelatedFatwaItem:
+      type: object
+      required:
+        - id
+        - title
+        - category
+        - source
+        - scholar
+        - published_date
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        question:
+          type: string
+        answer:
+          type: string
+        category:
+          type: string
+        source:
+          $ref: '#/components/schemas/FatwaSource'
+        scholar:
+          type: string
+        published_date:
+          type: string
+
+    FatwaDetail:
+      allOf:
+        - $ref: '#/components/schemas/FatwaQA'
+        - type: object
+          properties:
+            relatedFatwas:
+              type: array
+              items:
+                $ref: '#/components/schemas/RelatedFatwaItem'
+
+    SearchResultItem:
+      allOf:
+        - $ref: '#/components/schemas/FatwaQA'
+        - type: object
+          required:
+            - score
+            - snippet
+            - matchedTerms
+          properties:
+            score:
+              type: number
+            snippet:
+              type: string
+            titleSnippet:
+              type: string
+            matchedTerms:
+              type: array
+              items:
+                type: string
+
+    FacetCount:
+      type: object
+      required:
+        - name
+        - count
+      properties:
+        name:
+          type: string
+        count:
+          type: integer
+
+    SearchFacets:
+      type: object
+      required:
+        - sources
+        - categories
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        scholars:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
+
+    SearchResponse:
+      type: object
+      required:
+        - results
+        - total
+        - page
+        - limit
+        - totalPages
+        - facets
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+        facets:
+          $ref: '#/components/schemas/SearchFacets'
+        timingMs:
+          type: number
+        intent:
+          type: object
+
+    RAGRequest:
+      type: object
+      required:
+        - question
+      properties:
+        question:
+          type: string
+          minLength: 2
+          maxLength: 1000
+        contextLimit:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        fatwaIds:
+          type: array
+          items:
+            type: string
+
+    RAGResponse:
+      type: object
+      required:
+        - answer
+        - sources
+      properties:
+        answer:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelatedFatwaItem'
+        model:
+          type: string
+        latencyMs:
+          type: number
+
+    TrackEventRequest:
+      type: object
+      required:
+        - eventType
+      properties:
+        eventType:
+          type: string
+        eventData:
+          type: object
+
+    FatwaIngestionItem:
+      type: object
+      required:
+        - source
+        - source_url
+        - title
+        - question
+        - answer
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        source_url:
+          type: string
+        title:
+          type: string
+        question:
+          type: string
+        answer:
+          type: string
+        category:
+          type: string
+          default: General
+        tags:
+          type: array
+          items:
+            type: string
+        scholar:
+          type: string
+        published_date:
+          type: string
+        sha256_hash:
+          type: string
+        scraped_at:
+          type: string
+
+    FatwaIngestionBatchRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FatwaIngestionItem'
+
+    IngestResultItem:
+      type: object
+      required:
+        - id
+        - sha256_hash
+        - status
+      properties:
+        id:
+          type: string
+        sha256_hash:
+          type: string
+        status:
+          type: string
+          enum: [inserted, updated, skipped]
+
+    IngestResponse:
+      type: object
+      required:
+        - success
+        - inserted
+        - updated
+        - skipped
+        - total
+        - items
+      properties:
+        success:
+          type: boolean
+        inserted:
+          type: integer
+        updated:
+          type: integer
+        skipped:
+          type: integer
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngestResultItem'
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        details:
+          type: object

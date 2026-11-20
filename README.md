@@ -1,166 +1,160 @@
-# Fatwa & Islamic Q&A Search Platform
+# Fatwa & Islamic Q&A Search Platform (Monorepo)
 
-A clean, minimalist, lightning-fast search engine aggregating and indexing Islamic Q&As and Fatwas from authentic sources such as **Al-I'tisam** and **At-Tahreek**.
+A high-performance, minimalist search engine aggregating and indexing authentic Islamic Q&As and Fatwas from **Al-I'tisam**, **At-Tahreek**, and **Al-Kawsar**.
 
-Built with Next.js (App Router), TypeScript, Tailwind CSS, Lucide icons, Shadcn UI styling, SQLite with WAL mode, and MiniSearch with fuzzy matching.
-
----
-
-## Key Features
-
-1. **Unified Data Layer**:
-   - Standardized TypeScript Q&A model (`id`, `source`, `source_url`, `title`, `question`, `answer`, `category`, `tags`, `hash`, `createdAt`).
-   - SQLite persistent storage with WAL mode and ACID guarantees.
-   - Cryptographic SHA-256 deduplication hash guaranteeing idempotent upserts.
-
-2. **Search & Retrieval**:
-   - Debounced, sub-millisecond search API endpoint (`/api/v1/search`).
-   - Unicode-aware full-text search supporting Bengali, Arabic, and English scripts.
-   - Fuzzy matching (Levenshtein distance tolerance for spelling variations and transliterations).
-   - Dynamic snippet extraction with `<mark>` keyword highlighting.
-   - Source and Category facet filtering and pagination.
-
-3. **Minimalist UI (Perplexity / Linear style)**:
-   - Centered search input with instant results dropdown/list.
-   - Global keyboard shortcuts: `⌘K` or `/` to focus, `Esc` to clear.
-   - Filter chips for Sources ("All", "Al-I'tisam", "At-Tahreek") and Categories with live count badges.
-   - Expandable accordion cards and dedicated Reader Modal with high-readability Bengali/Arabic typography.
-   - One-click copy-link button for shareable deep links (`?id=...`).
-   - Full dark mode and light mode support.
-
-4. **Incremental Python Scraper**:
-   - `httpx` + `BeautifulSoup4` incremental crawler.
-   - Terminate pagination early as soon as known posts are reached.
-   - Batch ingestion to `/api/v1/ingest` with Bearer token authentication.
+Organized as an enterprise **Turborepo** monorepo supporting web, mobile (Expo), and shared TypeScript packages.
 
 ---
 
-## Quick Start
+## 🏗️ Monorepo Architecture
 
-### 1. Install Dependencies
+```
+.
+├── apps/
+│   ├── web/                  # Next.js 14 App Router web platform
+│   └── mobile/               # Expo (React Native) mobile application
+├── packages/
+│   ├── api-client/           # Typed client generated from OpenAPI 3.1 & Zod schemas
+│   ├── text-utils/           # Pure TS Bengali normalizer, stemmer & synonym registry
+│   └── config/               # Shared tsconfig & ESLint presets
+├── docs/
+│   ├── openapi.yaml          # OpenAPI 3.1 REST API specification
+│   └── ...
+├── data/
+│   └── fatwas.db             # SQLite search database (WAL mode)
+├── scraper/                  # Python incremental scrapers & sync scripts
+├── turbo.json                # Turborepo task pipeline configuration
+└── package.json              # Monorepo root workspace configuration
+```
+
+---
+
+## 📦 Workspaces & Packages
+
+### Applications (`apps/`)
+
+- **`apps/web`**: Production Next.js 14 (App Router) web application featuring full-text search, semantic search, Banglish transliteration, dynamic facets, AI-powered RAG, dark mode, and an admin dashboard.
+- **`apps/mobile`**: Cross-platform Expo / React Native mobile application integrating `@repo/api-client` and `@repo/text-utils` for online and offline search capabilities.
+
+### Shared Packages (`packages/`)
+
+- **`@repo/api-client` (`packages/api-client`)**: Fully typed, production API client with runtime validation powered by Zod schemas mirroring `docs/openapi.yaml`. Exports client class, types, and schemas for web and mobile consumers.
+- **`@repo/text-utils` (`packages/text-utils`)**: Pure TypeScript utilities with zero external dependencies, providing:
+  - Bengali Unicode orthographic normalizer (`normalizeBengaliText`)
+  - Bengali morphological suffix stemmer (`stemBengaliToken`)
+  - Stopword detection (`isStopWord`)
+  - Fiqh synonym and orthographic variant expansion (`getSynonymsAndVariants`, `isAblutionTerm`)
+- **`@repo/config` (`packages/config`)**: Shared presets for TypeScript (`tsconfig/base`, `tsconfig/nextjs`, `tsconfig/react-library`, `tsconfig/react-native`) and ESLint.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
+- Node.js >= 20.0.0 < 23.0.0
+- npm >= 10.0.0 (or pnpm)
+
+### 2. Install Dependencies
+
+Install all dependencies across all workspaces:
 
 ```bash
 npm install
 ```
 
-### 2. Environment Configuration
+### 3. Environment Setup
 
-Copy `.env.example` to `.env.local`:
+Create `.env.local` inside `apps/web/`:
 
 ```bash
-cp .env.example .env.local
+cp apps/web/.env.example apps/web/.env.local
 ```
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `INGESTION_SECRET_TOKEN` | Bearer token required for `/api/v1/ingest` | `super_secure_fatwa_ingest_token_change_me_in_prod` |
-| `DATABASE_PATH` | Path to SQLite database file | `./data/fatwas.db` |
+| `DATABASE_PATH` | Path to SQLite database file | `../../data/fatwas.db` |
 | `NEXT_PUBLIC_APP_URL` | Base application URL | `http://localhost:3000` |
 
-### 3. Seed Initial Database
+---
 
-Populate the database with verified sample fatwas:
+## 💻 Common Commands (Turborepo)
 
+Turborepo orchestrates builds, linting, tests, and development across the monorepo:
+
+### Development
 ```bash
-npm run seed
-```
-
-### 4. Run Development Server
-
-```bash
+# Start all workspaces in parallel
 npm run dev
+
+# Or start specific applications
+npm run web:dev        # Start Next.js web application
+npm run mobile:dev     # Start Expo mobile app
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+### Type Checking & Linting
+```bash
+# Type check all workspaces
+npm run type-check
+
+# Lint all workspaces
+npm run lint
+```
+
+### Testing
+```bash
+# Run tests across packages
+npm test
+
+# Run web app tests specifically
+npm run web:test
+```
+
+### Production Build
+```bash
+# Build all apps and packages with Turbo caching
+npm run build
+```
 
 ---
 
-## API Documentation
+## 🌐 Deployments (Vercel)
 
-### 1. Ingestion Endpoint: `POST /api/v1/ingest`
+For web deployment on Vercel:
 
-Protected by Bearer token or `x-ingest-token` header.
+1. **Framework Preset**: `Next.js`
+2. **Root Directory**: `apps/web`
+3. **Build Command**: `next build` (or `npx turbo run build --filter=@repo/web`)
+4. **Output Directory**: `.next` (default)
+5. **Install Command**: Vercel automatically detects the Turborepo root and runs `npm install` across workspaces.
 
-**Headers:**
-```http
-Authorization: Bearer <INGESTION_SECRET_TOKEN>
-Content-Type: application/json
-```
-
-**Payload:**
-```json
-{
-  "items": [
-    {
-      "source": "Al-I'tisam",
-      "source_url": "https://al-itisam.com/fatwa/example",
-      "title": "Question Title",
-      "question": "Full question text",
-      "answer": "Detailed answer text",
-      "category": "সালাত (Prayer)",
-      "tags": ["সালাত", "জামায়াত"],
-      "createdAt": "2024-03-15T10:00:00Z"
-    }
-  ]
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "inserted": 1,
-  "updated": 0,
-  "skipped": 0,
-  "total": 1,
-  "message": "Processed 1 items (inserted: 1, updated: 0, skipped: 0)"
-}
-```
-
-### 2. Search Endpoint: `GET /api/v1/search`
-
-**Query Parameters:**
-- `q` (string): Search query text (e.g. `সালাত`, `ইনহেলার`, `যাকাত`).
-- `source` (string): Filter by source name (e.g. `Al-I'tisam`, `At-Tahreek`).
-- `category` (string): Filter by category.
-- `page` (integer): Page number (default: `1`).
-- `limit` (integer): Number of items per page (default: `10`).
-
-**Sample Response:**
-```json
-{
-  "results": [
-    {
-      "id": "7bb74497-821b-4f87-ab06-0d62ad45d3d0",
-      "source": "Al-I'tisam",
-      "title": "বিদআতী বা ফাসেক ইমামের পিছনে সালাত আদায় করার বিধান কি?",
-      "snippet": "...তার পিছনে <mark>সালাত</mark> আদায় করা বিশুদ্ধ...",
-      "score": 4.5,
-      "category": "সালাত (Prayer)",
-      "tags": ["ইমামতি", "সালাত", "বিদআত"]
-    }
-  ],
-  "total": 3,
-  "page": 1,
-  "limit": 10,
-  "totalPages": 1,
-  "tookMs": 1.2,
-  "facets": {
-    "sources": [{ "name": "Al-I'tisam", "count": 4 }, { "name": "At-Tahreek", "count": 4 }],
-    "categories": [{ "name": "সালাত (Prayer)", "count": 3 }]
-  }
-}
-```
-
-### 3. Single Fatwa Lookup: `GET /api/v1/fatwa/:id`
-
-Returns the complete record for a given Fatwa ID.
+> [!NOTE]
+> Database bundling: `apps/web/next.config.mjs` configures `outputFileTracingIncludes` to bundle the SQLite database into serverless functions.
 
 ---
 
-## Python Incremental Scraper
+## 📄 OpenAPI Specification
 
-Located in `scraper/`.
+The REST API is formally defined in [`docs/openapi.yaml`](docs/openapi.yaml) (OpenAPI 3.1.0).
+
+Key API endpoints include:
+- `GET /api/v1/search` — Search fatwas with phonetic expansion, transliteration, and facets
+- `GET /api/v1/fatwa/{id}` — Fetch detailed fatwa record by ID
+- `POST /api/v1/rag` — AI-powered RAG answer generation grounded on fatwa references
+- `POST /api/v1/analytics/track` — User interaction and search telemetry
+- `POST /api/v1/ingest` — Authenticated batch fatwa ingestion
+- `POST /api/v1/admin/auth` — Admin authentication
+
+To regenerate or verify `@repo/api-client` from `docs/openapi.yaml`:
+```bash
+npm run generate --workspace=@repo/api-client
+```
+
+---
+
+## 🐍 Monthly Sync & Web Scrapers
+
+The standalone Python scraper resides in `scraper/` and automatically discovers new fatwas from the authentic publishing boards:
 
 ```bash
 cd scraper
@@ -168,30 +162,14 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Run crawler with incremental pagination
-python3 incremental_scraper.py --source all --max-pages 5
+# Run incremental sync
+python3 incremental_scraper.py --source all --max-items 150
 ```
+
+GitHub Actions automatically runs this crawler on the 1st and 5th of each month (`.github/workflows/auto-sync-fatwas.yml`).
 
 ---
 
-## Data Storage & Git Hygiene
+## 🛡️ License
 
-Raw scraped datasets (`data/*.json`, total ~96 MB) and local SQLite database files are ignored by git via `.gitignore`. The application queries the local SQLite database (`data/fatwas.db`) directly, or can connect to remote MongoDB Atlas.
-
-### Seeding Data
-- Run `npm run seed` to populate the database if empty.
-- To reseed or force-update existing records: `npm run seed -- --force`.
-- Import custom JSON files: `npm run import:json -- <path-to-file.json>`.
-
-### Purging Large Historical Files from Git History (Optional)
-If you previously cloned this repository when large JSON files were committed and want to reduce the `.git` bundle size:
-```bash
-# Using git-filter-repo (recommended):
-pip install git-filter-repo
-git filter-repo --invert-paths --path data/al_itisam.json --path data/al_kawsar.json --path data/at_tahreek.json
-
-# Or using BFG Repo-Cleaner:
-bfg --delete-files "{al_itisam.json,al_kawsar.json,at_tahreek.json}"
-git reflog expire --expire=now --all && git gc --prune=now --aggressive
-```
-*Note: Rewriting git history modifies past commit SHAs and requires a `git push --force origin <branch>`.*
+Private repository. All rights reserved.

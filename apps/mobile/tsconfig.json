@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/config/tsconfig/react-native.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}

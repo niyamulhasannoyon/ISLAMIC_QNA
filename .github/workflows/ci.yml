@@ -1,0 +1,44 @@
+name: Monorepo CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Type-Check, Lint, Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Monorepo Type-Safety
+        run: npx turbo run type-check
+
+      - name: Lint All Workspaces
+        run: npx turbo run lint
+
+      - name: Run Package & Unit Tests
+        run: npx turbo run test --filter=@repo/text-utils --filter=@repo/api-client
+
+      - name: Run Web Security & Hygiene Tests
+        run: npm run test:security --workspace=@repo/web && npm run test:hygiene-security --workspace=@repo/web
+
+      - name: Build Web & Packages
+        run: npx turbo run build

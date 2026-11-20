@@ -1,0 +1,74 @@
+{
+  "expo": {
+    "name": "Fatwa Search",
+    "slug": "fatwa-search-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/YOUR-EXPO-PROJECT-ID",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 30000
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fatwasearch.app",
+      "buildNumber": "1",
+      "associatedDomains": [
+        "applinks:fatwa-search.example.com",
+        "applinks:www.fatwa-search.example.com"
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.fatwasearch.app",
+      "versionCode": 1,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "fatwa-search.example.com",
+              "pathPrefix": "/fatwa"
+            },
+            {
+              "scheme": "https",
+              "host": "fatwa-search.example.com",
+              "pathPrefix": "/search"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR-EXPO-PROJECT-ID"
+      }
+    }
+  }
+}

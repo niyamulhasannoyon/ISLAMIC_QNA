@@ -1,0 +1,37 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "9JA89Q8285.com.fatwasearch.app"
+        ],
+        "components": [
+          {
+            "/": "/fatwa/*",
+            "comment": "Deep links to question and answer detail views"
+          },
+          {
+            "/": "/search/*",
+            "comment": "Deep links to search query results"
+          },
+          {
+            "/": "/api/*",
+            "exclude": true,
+            "comment": "Excludes API endpoints"
+          },
+          {
+            "/": "/admin/*",
+            "exclude": true,
+            "comment": "Excludes web admin interface"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "9JA89Q8285.com.fatwasearch.app"
+    ]
+  }
+}

@@ -1,0 +1,194 @@
+import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { z } from 'zod';
+import { syncFatwaBatch } from '@/lib/pipeline/ingest';
+import { refreshSearchIndex } from '@/lib/search';
+import { IngestItemInput } from '@/types/fatwa';
+import { computeFatwaHash, isValidSha256 } from '@/lib/hash';
+import { safeErrorResponse } from '@/lib/apiErrors';
+import { sanitizeFatwaInput } from '@/lib/sanitizer';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * Validates that an ingested URL is a public HTTP/HTTPS URL and does not point
+ * to private IP ranges, localhost, or cloud metadata endpoints (SSRF mitigation).
+ */
+function isSafePublicUrl(urlStr: string): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase();
+    // Block localhost, loopback, and undefined/broadcast IPs
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
+      return false;
+    }
+    // Block cloud metadata service (AWS/GCP/Azure)
+    if (host === '169.254.169.254' || host === 'metadata.google.internal') {
+      return false;
+    }
+    // Block private RFC 1918 IPv4 ranges
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    // Block link-local IPv4 range
+    if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_INGEST_BATCH_SIZE = 500;
+
+const FatwaItemSchema = z.object({
+  source: z.string().min(1, 'Source is required').max(100),
+  source_url: z.string().min(1, 'Source URL is required').max(2048).refine(
+    (url) => isSafePublicUrl(url),
+    { message: 'Source URL must be a valid public HTTP/HTTPS URL (private/internal IPs blocked)' }
+  ),
+  title: z.string().min(1, 'Title is required').max(1000),
+  question: z.string().min(1, 'Question is required').max(50000),
+  answer: z.string().min(1, 'Answer is required').max(100000),
+  category: z.string().max(100).optional().default('General'),
+  tags: z.array(z.string().max(50)).max(50).optional().default([]),
+  scholar: z.string().max(200).optional().default(''),
+  published_date: z.string().max(100).optional(),
+  sha256_hash: z.string().max(64).optional(),
+  scraped_at: z.string().max(100).optional(),
+  hash: z.string().max(64).optional(),
+  createdAt: z.string().max(100).optional(),
+});
+
+const IngestPayloadSchema = z.union([
+  z.array(FatwaItemSchema).max(MAX_INGEST_BATCH_SIZE, `Batch exceeds maximum limit of ${MAX_INGEST_BATCH_SIZE} items`),
+  FatwaItemSchema,
+  z.object({
+    items: z.array(FatwaItemSchema).max(MAX_INGEST_BATCH_SIZE, `Batch exceeds maximum limit of ${MAX_INGEST_BATCH_SIZE} items`),
+  }),
+]);
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function verifyToken(req: NextRequest): boolean {
+  const secret = process.env.INGESTION_SECRET_TOKEN;
+  if (!secret || secret.trim().length === 0) {
+    console.error('[Ingest Security]: INGESTION_SECRET_TOKEN is not configured. Rejecting request.');
+    return false;
+  }
+
+  const normalizedSecret = secret.trim();
+
+  const authHeader = req.headers.get('authorization');
+  if (authHeader) {
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+      if (constantTimeEqual(parts[1], normalizedSecret)) return true;
+    }
+  }
+
+  const customHeader = req.headers.get('x-ingest-token');
+  if (customHeader && constantTimeEqual(customHeader, normalizedSecret)) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    if (!verifyToken(req)) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Invalid or missing secret bearer ingestion token' },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const parseResult = IngestPayloadSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: parseResult.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+
+    let rawItems: any[] = [];
+    const data = parseResult.data;
+
+    if (Array.isArray(data)) {
+      rawItems = data;
+    } else if ('items' in data) {
+      rawItems = data.items;
+    } else {
+      rawItems = [data];
+    }
+
+    if (rawItems.length === 0) {
+      return NextResponse.json(
+        { error: 'Payload must contain at least one item' },
+        { status: 400 }
+      );
+    }
+
+    const validatedItems: IngestItemInput[] = rawItems.map((item) => {
+      const sanitized = sanitizeFatwaInput(item);
+      const computedHash = computeFatwaHash({
+        question: sanitized.question || '',
+        answer: sanitized.answer || '',
+      });
+
+      const providedHash = sanitized.sha256_hash || (sanitized as any).hash;
+      let finalHash = computedHash;
+
+      if (providedHash && isValidSha256(providedHash)) {
+        finalHash = providedHash.toLowerCase();
+      }
+
+      return {
+        source: sanitized.source,
+        source_url: sanitized.source_url || '',
+        title: sanitized.title || '',
+        question: sanitized.question || '',
+        answer: sanitized.answer || '',
+        category: sanitized.category || 'General',
+        tags: sanitized.tags || [],
+        scholar: sanitized.scholar || '',
+        published_date: sanitized.published_date || (sanitized as any).createdAt || new Date().toISOString(),
+        sha256_hash: finalHash,
+        scraped_at: sanitized.scraped_at || new Date().toISOString(),
+      };
+    });
+
+    const batchResult = await syncFatwaBatch(validatedItems);
+
+    if (batchResult.inserted > 0 || batchResult.updated > 0) {
+      await refreshSearchIndex();
+    }
+
+    return NextResponse.json({
+      success: true,
+      inserted: batchResult.inserted,
+      updated: batchResult.updated,
+      skipped: batchResult.skipped,
+      total: batchResult.total,
+      storage: batchResult.storage,
+      items: batchResult.results,
+      message: `Processed ${batchResult.total} items via ${batchResult.storage} (inserted: ${batchResult.inserted}, updated: ${batchResult.updated}, skipped: ${batchResult.skipped})`,
+    });
+  } catch (error: any) {
+    return safeErrorResponse('Internal server error during ingestion', 500, error);
+  }
+}

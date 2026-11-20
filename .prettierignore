@@ -1,0 +1,10 @@
+node_modules
+.next
+data
+.vercel
+dist
+build
+coverage
+*.db
+*.db-*
+package-lock.json

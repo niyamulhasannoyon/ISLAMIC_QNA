@@ -1,27 +1,22 @@
 {
+  "extends": "./packages/config/tsconfig/base.json",
   "compilerOptions": {
-    "target": "es2020",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./apps/web/src/*", "./src/*"],
+      "@repo/config/*": ["./packages/config/*"],
+      "@repo/text-utils": ["./packages/text-utils/src/index.ts"],
+      "@repo/text-utils/*": ["./packages/text-utils/src/*"],
+      "@repo/api-client": ["./packages/api-client/src/index.ts"],
+      "@repo/api-client/*": ["./packages/api-client/src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "scripts/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "apps",
+    "packages"
+  ]
 }

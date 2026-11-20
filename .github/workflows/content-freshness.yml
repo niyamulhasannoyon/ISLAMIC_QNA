@@ -1,0 +1,81 @@
+name: Content Freshness, Dedupe & Link Health
+
+on:
+  schedule:
+    # Runs weekly on Sunday & Wednesday at 02:00 UTC (08:00 AM Bangladesh Time)
+    - cron: '0 2 * * 0,3'
+  workflow_dispatch: # Allows one-click manual trigger from GitHub Actions tab
+
+jobs:
+  freshness-pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r scraper/requirements.txt
+
+      - name: 1. Source Site Structure & Layout Canary Check
+        id: structure_check
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL || '' }}
+        run: |
+          echo "Running DOM canary checks for Al-I'tisam, At-Tahreek & Al-Kawsar..."
+          python3 scraper/structure_monitor.py
+
+      - name: 2. Incremental Scraper Run with SHA-256 Deduplication
+        if: steps.structure_check.outcome == 'success'
+        env:
+          API_URL: ${{ secrets.API_URL || secrets.NEXT_PUBLIC_APP_URL || '' }}
+          INGESTION_SECRET_TOKEN: ${{ secrets.INGESTION_SECRET_TOKEN || '' }}
+        run: |
+          echo "Executing incremental live crawler with idempotent fingerprinting..."
+          python3 scraper/incremental_scraper.py --source all --max-items 150
+
+      - name: 3. Broken-Link & Content Rot Audit
+        run: |
+          echo "Running asynchronous link health check across canonical sources..."
+          python3 scraper/check_broken_links.py --sample 60
+
+      - name: 4. Commit and Push Updated Data
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/fatwas.db data/broken_links_report.json scraper/scraper_state.json
+          if git diff --staged --quiet; then
+            echo "No content changes or new fatwas discovered. State is up to date."
+          else
+            git commit -m "Auto-Freshness: Sync weekly fatwas, dedupe index & update link audit"
+            git push origin main
+          fi
+
+      - name: 5. Generate GitHub Action Summary
+        if: always()
+        run: |
+          echo "## 📊 Content Freshness & Source Health Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pipeline Execution Time:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Structure Canary Check:** Completed" >> $GITHUB_STEP_SUMMARY
+          if [ -f "data/broken_links_report.json" ]; then
+            echo "- **Link Rot Audit Summary:**" >> $GITHUB_STEP_SUMMARY
+            python3 -c "
+          import json
+          with open('data/broken_links_report.json') as f:
+              data = json.load(f)
+              print(f\"  - Sample Checked: {data.get('sample_size')} URLs\")
+              print(f\"  - Healthy: {data.get('healthy_count')}\")
+              print(f\"  - Broken: {data.get('broken_count')} ({data.get('broken_rate_pct')}%) \")
+          " >> $GITHUB_STEP_SUMMARY
+          fi
