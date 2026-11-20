@@ -27,7 +27,7 @@
   "dependencies": {
     "@repo/api-client": "*",
     "@repo/text-utils": "*",
-    "better-sqlite3": "^11.5.0",
+    "better-sqlite3": "^13.2.0",
     "clsx": "^2.1.1",
     "google-auth-library": "^11.0.2",
     "lucide-react": "^0.453.0",
