@@ -13,8 +13,11 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "type-check": "turbo run type-check",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test --config=apps/web/playwright.config.ts",
     "sync:live": "python3 scraper/incremental_scraper.py",
     "eval:search": "tsx scripts/eval-search.ts",
+    "build:embeddings": "tsx scripts/build-embeddings.ts",
     "search:weekly-loop": "tsx scripts/search-quality-weekly-loop.ts",
     "generate:embeddings": "tsx scripts/generate-embeddings.ts",
     "web:dev": "npm run dev --workspace=@repo/web",
@@ -27,7 +30,8 @@
     "prettier": "^3.3.3",
     "tsx": "^4.23.13",
     "turbo": "^2.11.13",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20.0.0 <23.0.0"

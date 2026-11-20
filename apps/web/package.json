@@ -14,6 +14,8 @@
     "create:vector-index": "tsx src/scripts/create-vector-index.ts",
     "generate:embeddings": "tsx src/scripts/generate-embeddings.ts",
     "test:vector-search": "tsx src/scripts/test-vector-search.ts",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
     "test": "tsx src/scripts/test-search.ts && tsx src/scripts/test-banglish-search.ts && tsx src/scripts/test-api.ts && npm run test:security && npm run test:hygiene-security",
     "test:search": "tsx src/scripts/test-search.ts",
     "test:banglish": "tsx src/scripts/test-banglish-search.ts",
