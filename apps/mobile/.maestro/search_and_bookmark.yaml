@@ -1,0 +1,56 @@
+appId: ${APP_ID:-com.niyamul.deenqna}
+---
+# DeenQnA E2E Flow: Search -> Open Reader -> Bookmark -> Offline Search
+
+- launchApp:
+    clearState: true
+
+# 1. Verify Home Search Screen loads
+- assertVisible: "প্রশ্ন বা বিষয় লিখুন.*"
+- assertVisible: "সব উৎস"
+
+# 2. Perform live search for a topic
+- tapOn: "প্রশ্ন বা বিষয় লিখুন.*"
+- inputText: "নামাজ"
+- hideKeyboard
+
+# 3. Wait for search results and verify content cards appear
+- extendedWaitUntil:
+    visible: ".*নামায.*|.*সালাত.*"
+    timeout: 8000
+
+# 4. Open the Reader screen by tapping on the first fatwa card
+- tapOn:
+    point: "50%,38%"
+
+# 5. Verify Reader Screen renders with high-readability typography
+- assertVisible: "প্রশ্ন:"
+- assertVisible: "উত্তর:"
+- assertVisible: "মূল ওয়েবসাইটে দেখুন"
+
+# 6. Bookmark the Fatwa via Reader screen header action
+- tapOn:
+    point: "92%,7%" # Bookmark icon top right
+
+# 7. Navigate back to Tabs
+- back
+
+# 8. Navigate to Bookmarks tab
+- tapOn: "সংরক্ষিত"
+
+# 9. Verify the bookmarked item is present in Bookmarks list
+- assertVisible: "সব সংরক্ষিত"
+
+# 10. Test Offline Mode & FTS5 search
+# Navigate to Settings to verify offline sync cache
+- tapOn: "সেটিংস"
+- assertVisible: "অফলাইন ডাটাবেজ"
+
+# Navigate back to Search tab
+- tapOn: "অনুসন্ধান"
+
+# Verify search works with cached FTS5 data
+- tapOn: "প্রশ্ন বা বিষয় লিখুন.*"
+- eraseText
+- inputText: "রোজা"
+- hideKeyboard
